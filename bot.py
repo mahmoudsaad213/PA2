@@ -400,12 +400,12 @@ def check_cards_thread(user_id, message):
         checked += 1
         result = checker.check_card(card)
         
-        # إنشاء زر لعرض نتيجة الفحص
+        # إنشاء زر لعرض نتيجة الفحص مع الـ status_3ds مباشرة
         keyboard = types.InlineKeyboardMarkup(row_width=1)
-        status_text = result['message']
+        status_3ds = result.get('details', {}).get('status_3ds', 'Unknown')
         callback_data = f"show_result_{checked}"
         keyboard.add(
-            types.InlineKeyboardButton(f"📋 نتيجة الكرت: {status_text}", callback_data=callback_data)
+            types.InlineKeyboardButton(f"📋 نتيجة الكرت | Status: {status_3ds}", callback_data=callback_data)
         )
         keyboard.add(
             types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
