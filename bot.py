@@ -226,6 +226,12 @@ class BraintreeChecker:
                     'message': '✅ Charged Successfully',
                     'details': details
                 }
+            else:
+                return {
+                    'status': 'APPROVED',
+                    'message': '✓ Approved (No CVV)',
+                    'details': details
+                }
         
         elif acs_url or enrolled == 'Y':
             return {
@@ -234,9 +240,23 @@ class BraintreeChecker:
                 'details': details
             }
         
+        elif 'authenticate_rejected' in status or 'failed' in status or 'unavailable' in status:
+            return {
+                'status': 'DECLINED',
+                'message': '❌ Declined',
+                'details': details
+            }
+        
+        elif 'bypass' in status or enrolled == 'N':
+            return {
+                'status': 'APPROVED',
+                'message': '✓ Approved (No 3DS)',
+                'details': details
+            }
+        
         return {
-            'status': 'DECLINED',
-            'message': 'Declined',
+            'status': 'ERROR',
+            'message': f'❔ Unknown Status: {status}',
             'details': details
         }
     
@@ -276,7 +296,7 @@ def start_message(message):
 ✅ Fast & Accurate Checking
 📊 Real-time Results  
 🔒 Secure Processing
-💳 Only Charged Cards Sent
+💳 Only LIVE Cards Sent
 
 📤 Send your combo file to start checking!
 ━━━━━━━━━━━━━━━━━━━━
@@ -522,7 +542,7 @@ def help_message(message):
 📤 How to use:
 1. Send a combo file (.txt)
 2. Click "Start Checking"
-3. Only charged cards will be sent
+3. Only LIVE cards will be sent
 
 📝 Combo Format:
 Card|MM|YYYY|CVV
