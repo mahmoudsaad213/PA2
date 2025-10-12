@@ -218,7 +218,7 @@ class BraintreeChecker:
             'enrolled': enrolled
         }
         
-        if 'authenticate_successful' in status and liability:
+        if status in ['authenticate_successful', 'authenticate_attempt_successful'] and liability:
             return {
                 'status': 'LIVE',
                 'message': '✅ Charged Successfully',
@@ -246,7 +246,7 @@ class BraintreeChecker:
                 'details': details
             }
         
-        if 'authenticate_attempt_successful' in status and not liability:
+        if status == 'authenticate_attempt_successful' and not liability:
             return {
                 'status': 'APPROVED',
                 'message': '✓ Approved (No CVV)',
@@ -405,7 +405,7 @@ def check_cards_thread(user_id, message):
         status_3ds = result.get('details', {}).get('status_3ds', 'Unknown')
         callback_data = f"show_result_{checked}"
         keyboard.add(
-            types.InlineKeyboardButton(f"📋|Status: {status_3ds}", callback_data=callback_data)
+            types.InlineKeyboardButton(f"📋 نتيجة الكرت | Status: {status_3ds}", callback_data=callback_data)
         )
         keyboard.add(
             types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
