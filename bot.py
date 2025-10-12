@@ -405,7 +405,7 @@ def check_cards_thread(user_id, message):
         status_3ds = result.get('details', {}).get('status_3ds', 'Unknown')
         callback_data = f"show_result_{checked}"
         keyboard.add(
-            types.InlineKeyboardButton(f"📋 نتيجة الكرت | Status: {status_3ds}", callback_data=callback_data)
+            types.InlineKeyboardButton(f"📋|Status: {status_3ds}", callback_data=callback_data)
         )
         keyboard.add(
             types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
