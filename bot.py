@@ -400,6 +400,23 @@ def check_cards_thread(user_id, message):
         checked += 1
         result = checker.check_card(card)
         
+        # إنشاء زر لعرض نتيجة الفحص
+        keyboard = types.InlineKeyboardMarkup(row_width=1)
+        status_text = result['message']
+        callback_data = f"show_result_{checked}"
+        keyboard.add(
+            types.InlineKeyboardButton(f"📋 نتيجة الكرت: {status_text}", callback_data=callback_data)
+        )
+        keyboard.add(
+            types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Approved ✓ ➜ [{approved}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• OTP 🔐 ➜ [{otp}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Declined ❌ ➜ [{declined}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Errors ⚠️ ➜ [{errors}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Total ➜ [{checked}/{total}] •", callback_data='x'),
+            types.InlineKeyboardButton("⏹ Stop", callback_data='stop_check')
+        )
+        
         if result['status'] == 'LIVE':
             live += 1
             details = result['details']
@@ -430,58 +447,16 @@ def check_cards_thread(user_id, message):
         elif result['status'] == 'OTP':
             otp += 1
             failed_count = 0
-            details = result['details']
-            msg = f"""<b>🔐 OTP Required
-━━━━━━━━━━━━━━━━━━━━
-💳 Card: <code>{card['raw']}</code>
-📊 Response: {result['message']}
-⏱ Time: {result['time']} sec
-
-🏦 BIN Info:
-├ BIN: <code>{details['bin']}</code>
-├ Type: {details['type']}
-├ Bank: {details['bank']}
-└ Country: {details['country']} {details['emoji']}
-
-🔒 3DS Info:
-├ Status: {details['status_3ds']}
-├ Liability: {'✅ Shifted' if details['liability'] else '❌ Not Shifted'}
-└ Enrolled: {details['enrolled']}
-━━━━━━━━━━━━━━━━━━━━
-👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-            bot.send_message(user_id, msg)
         elif result['status'] == 'DECLINED':
             declined += 1
             failed_count = 0
-            details = result['details']
-            msg = f"""<b>❌ DECLINED
-━━━━━━━━━━━━━━━━━━━━
-💳 Card: <code>{card['raw']}</code>
-📊 Response: {result['message']}
-⏱ Time: {result['time']} sec
-
-🏦 BIN Info:
-├ BIN: <code>{details['bin']}</code>
-├ Type: {details['type']}
-├ Bank: {details['bank']}
-└ Country: {details['country']} {details['emoji']}
-
-🔒 3DS Info:
-├ Status: {details['status_3ds']}
-├ Liability: {'✅ Shifted' if details['liability'] else '❌ Not Shifted'}
-└ Enrolled: {details['enrolled']}
-━━━━━━━━━━━━━━━━━━━━
-👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-            bot.send_message(user_id, msg)
         else:
             errors += 1
             failed_count += 1
             if result['message'] == 'Lookup Error':
                 checking_status[user_id] = False
                 bot.edit_message_text(
-                    chat_id=message.chat,
+                    chat_id=message.chat.id,
                     message_id=message.message_id,
                     text=f"""<b>⚠️ Lookup Error Detected!
 ━━━━━━━━━━━━━━━━━━━━
@@ -497,22 +472,14 @@ def check_cards_thread(user_id, message):
                 if checker.get_auth_keys():
                     failed_count = 0
         
+        # تخزين نتيجة الكرت لعرضها عند الضغط على الزر
+        user_cards[user_id][checked-1]['result'] = result
+        
         progress = int((checked / total) * 20)
         progress_bar = f"[{'█' * progress}{'░' * (20 - progress)}] {int((checked / total) * 100)}%"
         elapsed = time.time() - start_time
         speed = checked / elapsed if elapsed > 0 else 0
         eta = (total - checked) / speed if speed > 0 else 0
-        
-        keyboard = types.InlineKeyboardMarkup(row_width=1)
-        keyboard.add(
-            types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• Approved ✓ ➜ [{approved}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• OTP 🔐 ➜ [{otp}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• Declined ❌ ➜ [{declined}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• Errors ⚠️ ➜ [{errors}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• Total ➜ [{checked}/{total}] •", callback_data='x'),
-            types.InlineKeyboardButton("⏹ Stop", callback_data='stop_check')
-        )
         
         try:
             bot.edit_message_text(
@@ -532,6 +499,7 @@ def check_cards_thread(user_id, message):
         
         time.sleep(0.5)
     
+    # النتيجة النهائية
     total_time = time.time() - start_time
     bot.edit_message_text(
         chat_id=message.chat.id,
@@ -558,6 +526,44 @@ def check_cards_thread(user_id, message):
     checking_status[user_id] = False
     del user_cards[user_id]
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_result_'))
+def show_card_result(call):
+    user_id = call.from_user.id
+    index = int(call.data.split('_')[-1]) - 1
+    
+    if user_id not in user_cards or index >= len(user_cards[user_id]):
+        bot.answer_callback_query(call.id, "❌ No result found!")
+        return
+    
+    card = user_cards[user_id][index]
+    result = card.get('result', {})
+    details = result.get('details', {})
+    
+    msg = f"""<b>{result.get('message', '❔ Unknown Status')}
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{card['raw']}</code>
+📊 Response: {result.get('message', 'Unknown')}
+⏱ Time: {result.get('time', 0)} sec"""
+    
+    if details:
+        msg += f"""
+🏦 BIN Info:
+├ BIN: <code>{details.get('bin', 'N/A')}</code>
+├ Type: {details.get('type', 'Unknown')}
+├ Bank: {details.get('bank', 'Unknown Bank')}
+└ Country: {details.get('country', 'XX')} {details.get('emoji', '🏳️')}
+
+🔒 3DS Info:
+├ Status: {details.get('status_3ds', 'N/A')}
+├ Liability: {'✅ Shifted' if details.get('liability', False) else '❌ Not Shifted'}
+└ Enrolled: {details.get('enrolled', 'U')}
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+    
+    bot.send_message(user_id, msg)
+    bot.answer_callback_query(call.id, "📋 Result displayed!")
+
 @bot.callback_query_handler(func=lambda call: call.data == 'stop_check')
 def stop_checking(call):
     user_id = call.from_user.id
@@ -579,7 +585,7 @@ def help_message(message):
 📤 How to use:
 1. Send a combo file (.txt)
 2. Click "Start Checking"
-3. Only LIVE, OTP, Declined cards sent
+3. Only LIVE cards sent, others via button
 
 📝 Combo Format:
 Card|MM|YYYY|CVV
