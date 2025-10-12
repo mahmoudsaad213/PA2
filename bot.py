@@ -195,7 +195,6 @@ class BraintreeChecker:
         card_type = card_info.get('brandCode', 'Unknown')
         bin_code = card_info.get('bin', 'N/A')
         
-        # Country emoji map
         country_emoji = {
             'USA': '🇺🇸', 'ITA': '🇮🇹', 'GBR': '🇬🇧', 'CAN': '🇨🇦', 
             'FRA': '🇫🇷', 'DEU': '🇩🇪', 'ESP': '🇪🇸', 'BRA': '🇧🇷',
@@ -219,38 +218,38 @@ class BraintreeChecker:
             'enrolled': enrolled
         }
         
-        if 'authenticate_successful' in status or 'authenticate_attempt_successful' in status:
-            if liability:
-                return {
-                    'status': 'LIVE',
-                    'message': '✅ Charged Successfully',
-                    'details': details
-                }
-            else:
-                return {
-                    'status': 'APPROVED',
-                    'message': '✓ Approved (No CVV)',
-                    'details': details
-                }
+        if 'authenticate_successful' in status and liability:
+            return {
+                'status': 'LIVE',
+                'message': '✅ Charged Successfully',
+                'details': details
+            }
         
-        elif acs_url or enrolled == 'Y':
+        if acs_url and enrolled == 'Y' and status in ['authentication_unavailable', 'lookup_complete']:
             return {
                 'status': 'OTP',
                 'message': '🔐 OTP Required',
                 'details': details
             }
         
-        elif 'authenticate_rejected' in status or 'failed' in status or 'unavailable' in status:
+        if status in ['authenticate_rejected', 'failed', 'unavailable']:
             return {
                 'status': 'DECLINED',
                 'message': '❌ Declined',
                 'details': details
             }
         
-        elif 'bypass' in status or enrolled == 'N':
+        if 'bypass' in status or enrolled == 'N':
             return {
                 'status': 'APPROVED',
                 'message': '✓ Approved (No 3DS)',
+                'details': details
+            }
+        
+        if 'authenticate_attempt_successful' in status and not liability:
+            return {
+                'status': 'APPROVED',
+                'message': '✓ Approved (No CVV)',
                 'details': details
             }
         
@@ -367,7 +366,6 @@ def start_checking(call):
     checking_status[user_id] = True
     bot.answer_callback_query(call.id, "✅ Starting check...")
     
-    # بدء الفحص في thread منفصل
     thread = threading.Thread(target=check_cards_thread, args=(user_id, call.message))
     thread.start()
 
@@ -404,7 +402,6 @@ def check_cards_thread(user_id, message):
         
         if result['status'] == 'LIVE':
             live += 1
-            # إرسال رسالة منفصلة للبطاقة المشحونة فقط
             details = result['details']
             msg = f"""<b>✅ LIVE CARD
 ━━━━━━━━━━━━━━━━━━━━
@@ -433,16 +430,58 @@ def check_cards_thread(user_id, message):
         elif result['status'] == 'OTP':
             otp += 1
             failed_count = 0
+            details = result['details']
+            msg = f"""<b>🔐 OTP Required
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{card['raw']}</code>
+📊 Response: {result['message']}
+⏱ Time: {result['time']} sec
+
+🏦 BIN Info:
+├ BIN: <code>{details['bin']}</code>
+├ Type: {details['type']}
+├ Bank: {details['bank']}
+└ Country: {details['country']} {details['emoji']}
+
+🔒 3DS Info:
+├ Status: {details['status_3ds']}
+├ Liability: {'✅ Shifted' if details['liability'] else '❌ Not Shifted'}
+└ Enrolled: {details['enrolled']}
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+            bot.send_message(user_id, msg)
         elif result['status'] == 'DECLINED':
             declined += 1
             failed_count = 0
+            details = result['details']
+            msg = f"""<b>❌ DECLINED
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{card['raw']}</code>
+📊 Response: {result['message']}
+⏱ Time: {result['time']} sec
+
+🏦 BIN Info:
+├ BIN: <code>{details['bin']}</code>
+├ Type: {details['type']}
+├ Bank: {details['bank']}
+└ Country: {details['country']} {details['emoji']}
+
+🔒 3DS Info:
+├ Status: {details['status_3ds']}
+├ Liability: {'✅ Shifted' if details['liability'] else '❌ Not Shifted'}
+└ Enrolled: {details['enrolled']}
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+            bot.send_message(user_id, msg)
         else:
             errors += 1
             failed_count += 1
             if result['message'] == 'Lookup Error':
                 checking_status[user_id] = False
                 bot.edit_message_text(
-                    chat_id=message.chat.id,
+                    chat_id=message.chat,
                     message_id=message.message_id,
                     text=f"""<b>⚠️ Lookup Error Detected!
 ━━━━━━━━━━━━━━━━━━━━
@@ -458,7 +497,6 @@ def check_cards_thread(user_id, message):
                 if checker.get_auth_keys():
                     failed_count = 0
         
-        # تحديث الحالة
         progress = int((checked / total) * 20)
         progress_bar = f"[{'█' * progress}{'░' * (20 - progress)}] {int((checked / total) * 100)}%"
         elapsed = time.time() - start_time
@@ -494,7 +532,6 @@ def check_cards_thread(user_id, message):
         
         time.sleep(0.5)
     
-    # النتيجة النهائية
     total_time = time.time() - start_time
     bot.edit_message_text(
         chat_id=message.chat.id,
@@ -542,7 +579,7 @@ def help_message(message):
 📤 How to use:
 1. Send a combo file (.txt)
 2. Click "Start Checking"
-3. Only LIVE cards will be sent
+3. Only LIVE, OTP, Declined cards sent
 
 📝 Combo Format:
 Card|MM|YYYY|CVV
