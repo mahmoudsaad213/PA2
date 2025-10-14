@@ -21,20 +21,21 @@ checking_status = {}
 class BraintreeChecker:
     def __init__(self):
         self.cookies = {
-            '__cf_bm': 'X.v3S9eWwnNdRmJHHyyE_V1JQGdjD7S3Lqht0LadQgM-1760274913-1.0.1.1-rKY.JHG8f8NGSYraWIVUMEuB8T3HAOYiRqXnEeB4i0Uihi77tPD0pfqRtmIFlLrMUd.yC1laYJJa3mXbQ8mbuYu5kAeAupCZmTUQgFVZA9xbelQeirJAU84cP9zhHer1',
-            '_cfuvid': 'eisn2xtkqbjyG66razZ4GziNudYEnMJEyFhxQAZ5J8w-1760274913559-0.0.1.1-604800000',
-            'cf_clearance': 'cc0IzVqfepgIRFi3SmY0ME586_iIcs1id5kI8zHcSvk-1760274916-1.2.1.1-i.kybNwydGx59AnphU4XsXNy2Jb_td0mel8x98rYch7taA_NQCJQQkfsDggZHNocJMVmSExPgf7jUv0E.AkVwjtsHZ8kCTkAcE2sOcoyE8Imk.y.FizFtrS4gKMS9QELz0gfjRn6y2pbBUVmPoucFvzB0H7fYR2qbK5nJ05oCsYYqGuUKVXWjPhRC32cYlIp3rHjjWIaCMyP2zBGupxQwziF2xK7dCXcrZ2KrpFHPII',
-            'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
-            '_ga': 'GA1.1.1621947723.1760274919',
-            '_fbp': 'fb.1.1760275029153.598626225449115550',
-            '_gcl_au': '1.1.1108336088.1760275025.458223104.1760275040.1760275039',
-            'PHPSESSID': '590c85cc8e5253b2afbeeb3f1d5becdf',
-            '_identity': '%5B1629404%2C%22%22%2C1800%5D',
             '_li_ns': '1',
-            'device_1629404': '288ca392-9560-4e84-9671-b4251d28c96e',
-            'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222862737852343640%22%2C%22e%22%3A1791810915913%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2210890802663334486%22%2C%22e%22%3A1760277669861%7D%7D',
-            '_ga_5WDMLTHHFH': 'GS2.1.s1760274918$o1$g1$t1760275870$j60$l0$h405338330',
-            '_csrf': 'j692CC-oNF8wuIxHRoUD_NzbgGrgom6SOqOGGvAi4InZyhxcFuAAPVyK-T9-sjWE6KnCLbLACctWjtldpWqp4w%3D%3D',
+            '_csrf': '7Y5hz1wXf6_GJRGtx8-DvnrvRLvNDXnN95HER2pknfaPyEyfD188zPNfXNepgeyILb0K4v01LIykwJw3ISXCjA%3D%3D',
+            'wasLoggedIn': '1',
+            '_identity': '%5B1630303%2C%22%22%2C1800%5D',
+            '_fbp': 'fb.1.1760331033259.683801318978821414',
+            'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
+            'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2244078900761012460%22%2C%22e%22%3A1760426272165%7D%7D',
+            '__cf_bm': 'GEmy5C23.w9bGJpFxEfdw_qXnyX6kizrm_slsEwmtQQ-1760424090-1.0.1.1-p_zC8Ny6FhWtt2SJfPYcfbdK0zx5pX2Sj_f0iqfENVUDIiZb4H7tpwVfffnwhcMz4O6IsW9eLpEgGdMu4rfyaQTq8WVVNk1ZZkWfqk_F9PiFWYJVKDZdC8LxHnE5.9NY',
+            '_cfuvid': '9.jFgE1WtnCarhYoqixBxMqdwcjBj599QfJUYplZHNU-1760424090441-0.0.1.1-604800000',
+            '_ga': 'GA1.1.1722861085.1760331033',
+            '_ga_5WDMLTHHFH': 'GS2.1.s1760424148$o2$g1$t1760424472$j60$l0$h1709032740',
+            '_gcl_au': '1.1.2109561485.1760331033',
+            'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
+            'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
+            'PHPSESSID': '51141fe550e7ea4ffb083c57a9f7619e',
         }
         self.auth_fingerprint = None
         
@@ -78,7 +79,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': '561f4a7a-ffc1-4570-930b-54ac66d9469a',
+                    'sessionId': '63764ba7-4f3f-44b7-a8c4-69e403a1b5f8',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -132,7 +133,7 @@ class BraintreeChecker:
                     'mobilePhoneNumber': '13609990000',
                 },
                 'bin': bin_num[:6],
-                'dfReferenceId': '0_96fa1788-6eec-4799-975b-4ce83ad222e4',
+                'dfReferenceId': '0_6b63e7f6-ce04-4b42-96d5-8849a078a8fe',
                 'clientMetadata': {
                     'requestedThreeDSecureVersion': '2',
                     'sdkVersion': 'web/3.124.0',
@@ -149,7 +150,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': '561f4a7a-ffc1-4570-930b-54ac66d9469a',
+                    'sessionId': '63764ba7-4f3f-44b7-a8c4-69e403a1b5f8',
                 },
             }
             
