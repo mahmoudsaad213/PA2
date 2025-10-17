@@ -21,21 +21,22 @@ checking_status = {}
 class BraintreeChecker:
     def __init__(self):
         self.cookies = {
-            '_li_ns': '1',
-            '_csrf': '7Y5hz1wXf6_GJRGtx8-DvnrvRLvNDXnN95HER2pknfaPyEyfD188zPNfXNepgeyILb0K4v01LIykwJw3ISXCjA%3D%3D',
-            'wasLoggedIn': '1',
-            '_identity': '%5B1630303%2C%22%22%2C1800%5D',
-            '_fbp': 'fb.1.1760331033259.683801318978821414',
-            'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
-            'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2244078900761012460%22%2C%22e%22%3A1760426272165%7D%7D',
-            '__cf_bm': 'GEmy5C23.w9bGJpFxEfdw_qXnyX6kizrm_slsEwmtQQ-1760424090-1.0.1.1-p_zC8Ny6FhWtt2SJfPYcfbdK0zx5pX2Sj_f0iqfENVUDIiZb4H7tpwVfffnwhcMz4O6IsW9eLpEgGdMu4rfyaQTq8WVVNk1ZZkWfqk_F9PiFWYJVKDZdC8LxHnE5.9NY',
-            '_cfuvid': '9.jFgE1WtnCarhYoqixBxMqdwcjBj599QfJUYplZHNU-1760424090441-0.0.1.1-604800000',
-            '_ga': 'GA1.1.1722861085.1760331033',
-            '_ga_5WDMLTHHFH': 'GS2.1.s1760424148$o2$g1$t1760424472$j60$l0$h1709032740',
-            '_gcl_au': '1.1.2109561485.1760331033',
-            'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
-            'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
-            'PHPSESSID': '51141fe550e7ea4ffb083c57a9f7619e',
+        '_gcl_au': '1.1.2109561485.1760331033',
+        '_ga': 'GA1.1.1722861085.1760331033',
+        '_fbp': 'fb.1.1760331033259.683801318978821414',
+        'wasLoggedIn': '1',
+        'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
+        'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
+        'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
+        'cf_clearance': 'n5EoKo9NaxfDsrivHv6yqsvDZ.3FARa5e0yAqML92gU-1760424147-1.2.1.1-TOfFdOAezicLPBk1zf0VUD4xyyyR9cheq8zLxPLY1TBsgPwqNZwutVkpvPS9eLmhLmX_WBzaBTlh2RUtdhgJ5xRgQazrDbEbVsQEem4uc9YWWlHXN.QyErd4eTP5URQJNZE0xYt2Vh9SquWmVqpNHi5E3U6PJ4H2MKMGR6VnGVY.QQ9vvJGPwWi.R6xaKdEl0Z0IyXVKeXqws2mYgBPxQoGCkYfN2gUce8hIKXK9Ufg',
+        '_ga_5WDMLTHHFH': 'GS2.1.s1760424148$o2$g1$t1760424713$j60$l0$h1709032740',
+        'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2244078900761012460%22%2C%22e%22%3A1760426508194%7D%7D',
+        '__cf_bm': 'duSYXhlwB4lVXjRh0Pphrw_XTl7Y3R12d_m.3FKYsog-1760697435-1.0.1.1-Oh2PoBJZO957xnFzxO8oxUsce_hm4fkTFUt2dZ9I2gXRxZKKmyIj7aKrqAjWzBQbgZPWYVVhVfGWPWK_nq.KVDtSy_yDjHn6kn.cLEYFCluZbyDGqG.Yk3EQEbtuijEo',
+        '_cfuvid': 'NDGAAjNz8NbfroTe243olWWPKpG6gtD7EZRX8KTCe6I-1760697435117-0.0.1.1-604800000',
+        'PHPSESSID': '04d3392c8ca31f57f07427522d1ee3ac',
+        '_identity': '%5B1630303%2C%22%22%2C1800%5D',
+        '_li_ns': '1',
+        '_csrf': 'b7kYjsNDILl6IWsS5zjJrqonmLnATuHce9HjECJlZ3FC6SHatXNR3R1SIF6FWZ-byUaozvEcpb0Ju4lYaFcwKA%3D%3D',
         }
         self.auth_fingerprint = None
         
@@ -79,7 +80,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': '63764ba7-4f3f-44b7-a8c4-69e403a1b5f8',
+                    'sessionId': '3536bd7a-fbe1-455e-85f8-2e5d53672fce',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -150,7 +151,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': '63764ba7-4f3f-44b7-a8c4-69e403a1b5f8',
+                    'sessionId': '3536bd7a-fbe1-455e-85f8-2e5d53672fce',
                 },
             }
             
