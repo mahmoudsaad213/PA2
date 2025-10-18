@@ -27,17 +27,17 @@ class BraintreeChecker:
     'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
     'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
     'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
-    '__cf_bm': 'E803Ak_HrESjbWB4N7EbNGogMbqZeFS.KChpiH77zPg-1760775773-1.0.1.1-Hue2oEd.jvRDcALds8f49WzxUpWAzZ9ceoG.4Dq2q4VNq70AEsNKxfl2UFp3rdeD4biS.xipF6J7HnNPPgmJmclhtjDBePe4.fnJQn.WiUBQiFJeocmw4Ahq00InccoX',
-    '_cfuvid': 'BSjeyKSM3OGGkJW3RyVLxit4y3TBDjWL0N58VdQOUEE-1760775773819-0.0.1.1-604800000',
     '_gcl_au': '1.1.2109561485.1760331033.512246728.1760775812.1760775811',
-    'PHPSESSID': '8f332717bc9c6b5606cc57277fb31ad2',
-    '_identity': '%5B1632436%2C%22%22%2C1800%5D',
-    '_li_ns': '1',
     'device_1632436': '08a0ce0e-4965-4305-b1e0-8b205f64fdf1',
     'cf_clearance': 'tpyQv4z19895Q21FoLSAzgxKCpSwoSKL1tZpd5rrk6s-1760775856-1.2.1.1-FOxWpW23ZwmxtGuch1GaG2kIOrDzPr3zXh5b1OJG1o5plaSHaAG7kLHqBqC0QAcFf2LR8UvI9LddnjA0Uwzx28LC8SJkv2PoGNKLNovaFAjUPkt6JkrlB.DnYE.XPrIHX9JFHqDdeJiGba.nU7MOQUsDhoQjJ27du1SgucZNahwr9jay6vw_isEgGwYycnjS2ARplQB9CszkCekkI1wLH5ZFVTp4HlwNQuzuRZFkKiM',
-    'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2274362166412094460%22%2C%22e%22%3A1760777688757%7D%7D',
-    '_ga_5WDMLTHHFH': 'GS2.1.s1760775784$o3$g1$t1760775889$j15$l0$h209006561',
-    '_csrf': 'FUm2oZP1yGT95eP_MRWQZs4_WhohgAsURYACq_F3gBdKJfT03bawDbXIp9IEIqIIuUw7aWnXWlAH8FrapAH1IA%3D%3D',
+    'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2274362166412094460%22%2C%22e%22%3A1760777737327%7D%7D',
+    '__cf_bm': 'esaMVKyhjLaVeKrXKf.aFYl9iXJwhEe2Fty71Jvdlrg-1760815785-1.0.1.1-9UoMSQdB9gG0XZo2I9k8SbZTm97L7S.9_t77incO5XHnGEwTgos0R9QjtsIQylYAEmMvlJLdfJFALe2ffcMQhxr_kSV8MmuImeIcPsTM2tJOaDAZuxWB5DerEEEHuayV',
+    '_cfuvid': 'SbJHJRzAMKIaNfVtq2T015omENTPLToO5SgYjb_tHyg-1760815785893-0.0.1.1-604800000',
+    'PHPSESSID': '94547639f3836f8a20710fa422348d52',
+    '_identity': '%5B1632436%2C%22%22%2C1800%5D',
+    '_li_ns': '1',
+    '_ga_5WDMLTHHFH': 'GS2.1.s1760815801$o4$g1$t1760815810$j51$l0$h2000304167',
+    '_csrf': 'HjJ31fyptwu5G3DbNMGJa7oi8NGrlCUGNohidNubfNZ7exiEsuT-WsFKOuJggLAZgxeCn9HiXUBayQc4vdIruA%3D%3D',
         }
         self.auth_fingerprint = None
         
@@ -81,7 +81,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': 'fe22efff-9e79-4d74-90c6-08b116514511',
+                    'sessionId': '9abcc24b-2673-4589-abda-cae21361dca8',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -152,7 +152,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': 'fe22efff-9e79-4d74-90c6-08b116514511',
+                    'sessionId': '9abcc24b-2673-4589-abda-cae21361dca8',
                 },
             }
             
