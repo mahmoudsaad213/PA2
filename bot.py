@@ -21,22 +21,23 @@ checking_status = {}
 class BraintreeChecker:
     def __init__(self):
         self.cookies = {
-        '_gcl_au': '1.1.2109561485.1760331033',
-        '_ga': 'GA1.1.1722861085.1760331033',
-        '_fbp': 'fb.1.1760331033259.683801318978821414',
-        'wasLoggedIn': '1',
-        'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
-        'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
-        'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
-        'cf_clearance': 'n5EoKo9NaxfDsrivHv6yqsvDZ.3FARa5e0yAqML92gU-1760424147-1.2.1.1-TOfFdOAezicLPBk1zf0VUD4xyyyR9cheq8zLxPLY1TBsgPwqNZwutVkpvPS9eLmhLmX_WBzaBTlh2RUtdhgJ5xRgQazrDbEbVsQEem4uc9YWWlHXN.QyErd4eTP5URQJNZE0xYt2Vh9SquWmVqpNHi5E3U6PJ4H2MKMGR6VnGVY.QQ9vvJGPwWi.R6xaKdEl0Z0IyXVKeXqws2mYgBPxQoGCkYfN2gUce8hIKXK9Ufg',
-        '_ga_5WDMLTHHFH': 'GS2.1.s1760424148$o2$g1$t1760424713$j60$l0$h1709032740',
-        'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2244078900761012460%22%2C%22e%22%3A1760426508194%7D%7D',
-        '__cf_bm': 'duSYXhlwB4lVXjRh0Pphrw_XTl7Y3R12d_m.3FKYsog-1760697435-1.0.1.1-Oh2PoBJZO957xnFzxO8oxUsce_hm4fkTFUt2dZ9I2gXRxZKKmyIj7aKrqAjWzBQbgZPWYVVhVfGWPWK_nq.KVDtSy_yDjHn6kn.cLEYFCluZbyDGqG.Yk3EQEbtuijEo',
-        '_cfuvid': 'NDGAAjNz8NbfroTe243olWWPKpG6gtD7EZRX8KTCe6I-1760697435117-0.0.1.1-604800000',
-        'PHPSESSID': '04d3392c8ca31f57f07427522d1ee3ac',
-        '_identity': '%5B1630303%2C%22%22%2C1800%5D',
-        '_li_ns': '1',
-        '_csrf': 'b7kYjsNDILl6IWsS5zjJrqonmLnATuHce9HjECJlZ3FC6SHatXNR3R1SIF6FWZ-byUaozvEcpb0Ju4lYaFcwKA%3D%3D',
+    '_ga': 'GA1.1.1722861085.1760331033',
+    '_fbp': 'fb.1.1760331033259.683801318978821414',
+    'wasLoggedIn': '1',
+    'device_1629404': 'ea88c336-80d4-435e-a2f7-50901bd267f6',
+    'cookies-consent': 'necessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cadvertisement%3Ayes%2Cuncategorised%3Ayes',
+    'device_1630303': 'f5cfa990-7aa1-4612-b0a9-3a68d8cdae0d',
+    '__cf_bm': 'E803Ak_HrESjbWB4N7EbNGogMbqZeFS.KChpiH77zPg-1760775773-1.0.1.1-Hue2oEd.jvRDcALds8f49WzxUpWAzZ9ceoG.4Dq2q4VNq70AEsNKxfl2UFp3rdeD4biS.xipF6J7HnNPPgmJmclhtjDBePe4.fnJQn.WiUBQiFJeocmw4Ahq00InccoX',
+    '_cfuvid': 'BSjeyKSM3OGGkJW3RyVLxit4y3TBDjWL0N58VdQOUEE-1760775773819-0.0.1.1-604800000',
+    '_gcl_au': '1.1.2109561485.1760331033.512246728.1760775812.1760775811',
+    'PHPSESSID': '8f332717bc9c6b5606cc57277fb31ad2',
+    '_identity': '%5B1632436%2C%22%22%2C1800%5D',
+    '_li_ns': '1',
+    'device_1632436': '08a0ce0e-4965-4305-b1e0-8b205f64fdf1',
+    'cf_clearance': 'tpyQv4z19895Q21FoLSAzgxKCpSwoSKL1tZpd5rrk6s-1760775856-1.2.1.1-FOxWpW23ZwmxtGuch1GaG2kIOrDzPr3zXh5b1OJG1o5plaSHaAG7kLHqBqC0QAcFf2LR8UvI9LddnjA0Uwzx28LC8SJkv2PoGNKLNovaFAjUPkt6JkrlB.DnYE.XPrIHX9JFHqDdeJiGba.nU7MOQUsDhoQjJ27du1SgucZNahwr9jay6vw_isEgGwYycnjS2ARplQB9CszkCekkI1wLH5ZFVTp4HlwNQuzuRZFkKiM',
+    'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2274362166412094460%22%2C%22e%22%3A1760777688757%7D%7D',
+    '_ga_5WDMLTHHFH': 'GS2.1.s1760775784$o3$g1$t1760775889$j15$l0$h209006561',
+    '_csrf': 'FUm2oZP1yGT95eP_MRWQZs4_WhohgAsURYACq_F3gBdKJfT03bawDbXIp9IEIqIIuUw7aWnXWlAH8FrapAH1IA%3D%3D',
         }
         self.auth_fingerprint = None
         
@@ -80,7 +81,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': '3536bd7a-fbe1-455e-85f8-2e5d53672fce',
+                    'sessionId': 'fe22efff-9e79-4d74-90c6-08b116514511',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -138,8 +139,8 @@ class BraintreeChecker:
                 'clientMetadata': {
                     'requestedThreeDSecureVersion': '2',
                     'sdkVersion': 'web/3.124.0',
-                    'cardinalDeviceDataCollectionTimeElapsed': 408,
-                    'issuerDeviceDataCollectionTimeElapsed': 3262,
+                    'cardinalDeviceDataCollectionTimeElapsed': 483,
+                    'issuerDeviceDataCollectionTimeElapsed': 7648,
                     'issuerDeviceDataCollectionResult': True,
                 },
                 'authorizationFingerprint': self.auth_fingerprint,
@@ -151,7 +152,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': '3536bd7a-fbe1-455e-85f8-2e5d53672fce',
+                    'sessionId': 'fe22efff-9e79-4d74-90c6-08b116514511',
                 },
             }
             
