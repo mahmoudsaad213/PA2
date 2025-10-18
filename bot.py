@@ -81,7 +81,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': '9abcc24b-2673-4589-abda-cae21361dca8',
+                    'sessionId': 'd3476c80-4375-4d45-a2e6-159f7ab8e382',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -139,8 +139,8 @@ class BraintreeChecker:
                 'clientMetadata': {
                     'requestedThreeDSecureVersion': '2',
                     'sdkVersion': 'web/3.124.0',
-                    'cardinalDeviceDataCollectionTimeElapsed': 483,
-                    'issuerDeviceDataCollectionTimeElapsed': 7648,
+                    'cardinalDeviceDataCollectionTimeElapsed': 5,
+                    'issuerDeviceDataCollectionTimeElapsed': 2787,
                     'issuerDeviceDataCollectionResult': True,
                 },
                 'authorizationFingerprint': self.auth_fingerprint,
@@ -152,7 +152,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': '9abcc24b-2673-4589-abda-cae21361dca8',
+                    'sessionId': 'd3476c80-4375-4d45-a2e6-159f7ab8e382',
                 },
             }
             
