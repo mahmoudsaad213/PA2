@@ -444,7 +444,7 @@ def check_cards_thread(user_id, message):
 </b>"""
             )
             time.sleep(wait_time)
-            wait_time *= 2  # تضاعف وقت الانتظار
+            wait_time *= 1  # تضاعف وقت الانتظار
             na_count = 0  # إعادة تعيين العداد بعد الانتظار
         
         # إنشاء زر لعرض نتيجة الفحص
