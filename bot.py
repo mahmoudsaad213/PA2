@@ -189,6 +189,13 @@ class StripeChecker:
                 acs_url = three_ds_response.get('ares', {}).get('acsURL')
 
                 details = {'status_3ds': trans_status or 'N/A'}
+                if 'error' in three_ds_response and three_ds_response['error'].get('message', '').startswith('3D Secure 2 is not supported'):
+                    return {
+                        'status': 'DECLINED',
+                        'message': '❌ 3D Secure 2 Not Supported',
+                        'details': details,
+                        'time': round(time.time() - start_time, 2)
+                    }
                 if trans_status == 'N':
                     return {
                         'status': 'LIVE',
@@ -385,14 +392,36 @@ def check_cards_thread(user_id, message):
     
     live = otp = declined = errors = checked = 0
     start_time = time.time()
-    failed_count = 0
+    card_count = 0  # عداد الكروت للتجديد كل 10
+    error_count = 0  # عداد الأخطاء للتجديد بعد خطأ واحد
     
     for card in cards:
         if not checking_status.get(user_id, True):
             break
         
         checked += 1
+        card_count += 1
         result = checker.check_card(card)
+        
+        # تجديد المفاتيح كل 10 كروت أو بعد خطأ واحد
+        if card_count >= 10 or (result['status'] in ['ERROR', 'DECLINED'] and error_count >= 1):
+            bot.send_message(user_id, "⚠️ Refreshing keys...")
+            if checker.fetch_stripe_keys():
+                card_count = 0
+                error_count = 0
+            else:
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    text=f"""<b>⚠️ Failed to refresh keys!
+━━━━━━━━━━━━━━━━━━━━
+⏳ Checking stopped. Please update cookies.
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+                )
+                checking_status[user_id] = False
+                return
         
         # إنشاء زر لعرض نتيجة الفحص مع الـ status_3ds
         keyboard = types.InlineKeyboardMarkup(row_width=1)
@@ -423,20 +452,16 @@ def check_cards_thread(user_id, message):
 👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
             bot.send_message(user_id, msg)
-            failed_count = 0
+            error_count = 0
         elif result['status'] == 'OTP':
             otp += 1
-            failed_count = 0
+            error_count = 0
         elif result['status'] == 'DECLINED':
             declined += 1
-            failed_count = 0
+            error_count += 1
         else:
             errors += 1
-            failed_count += 1
-            if result['message'].startswith('Setup Intent Error') and failed_count >= 5:
-                bot.send_message(user_id, "⚠️ Refreshing keys...")
-                if checker.fetch_stripe_keys():
-                    failed_count = 0
+            error_count += 1
         
         # تخزين نتيجة الكرت
         user_cards[user_id][checked-1]['result'] = result
