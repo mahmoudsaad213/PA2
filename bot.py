@@ -409,7 +409,7 @@ def check_cards_thread(user_id, message):
     start_time = time.time()
     card_count = 0  # عداد الكروت للتجديد كل 10
     error_count = 0  # عداد الأخطاء للتجديد بعد 3 أخطاء متتالية
-    max_refreshes = 5  # الحد الأقصى للتجديدات
+    max_refreshes = 50000  # الحد الأقصى للتجديدات
     
     for card in cards:
         if not checking_status.get(user_id, True):
