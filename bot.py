@@ -31,13 +31,13 @@ class BraintreeChecker:
     'device_1632436': '08a0ce0e-4965-4305-b1e0-8b205f64fdf1',
     'cf_clearance': 'tpyQv4z19895Q21FoLSAzgxKCpSwoSKL1tZpd5rrk6s-1760775856-1.2.1.1-FOxWpW23ZwmxtGuch1GaG2kIOrDzPr3zXh5b1OJG1o5plaSHaAG7kLHqBqC0QAcFf2LR8UvI9LddnjA0Uwzx28LC8SJkv2PoGNKLNovaFAjUPkt6JkrlB.DnYE.XPrIHX9JFHqDdeJiGba.nU7MOQUsDhoQjJ27du1SgucZNahwr9jay6vw_isEgGwYycnjS2ARplQB9CszkCekkI1wLH5ZFVTp4HlwNQuzuRZFkKiM',
     'cfz_zaraz-analytics': '%7B%22_cfa_clientId%22%3A%7B%22v%22%3A%2222099663457815076%22%2C%22e%22%3A1791867032539%7D%2C%22_cfa_sId%22%3A%7B%22v%22%3A%2274362166412094460%22%2C%22e%22%3A1760777737327%7D%7D',
-    '__cf_bm': 'esaMVKyhjLaVeKrXKf.aFYl9iXJwhEe2Fty71Jvdlrg-1760815785-1.0.1.1-9UoMSQdB9gG0XZo2I9k8SbZTm97L7S.9_t77incO5XHnGEwTgos0R9QjtsIQylYAEmMvlJLdfJFALe2ffcMQhxr_kSV8MmuImeIcPsTM2tJOaDAZuxWB5DerEEEHuayV',
     '_cfuvid': 'SbJHJRzAMKIaNfVtq2T015omENTPLToO5SgYjb_tHyg-1760815785893-0.0.1.1-604800000',
-    'PHPSESSID': '94547639f3836f8a20710fa422348d52',
+    '__cf_bm': '1CCKxkVWawx2kEdO8hFRSF_vZSJVmkIkM6Tn5XG7dCk-1760869117-1.0.1.1-ifvFOTHrT0EVQoWtuZhWg5MKp4BW5EKwuETXOS9Pu9zvuTHn7iBrkWi.iJHAImuBMjnjgyhGpzFbRMRYot3GM8umRBliKChteC2vv7t9_vyDCvvDu1Xx4Fn2hs3tkfPp',
+    'PHPSESSID': 'd818e38d65089310c501cbd94bab29c6',
     '_identity': '%5B1632436%2C%22%22%2C1800%5D',
     '_li_ns': '1',
-    '_ga_5WDMLTHHFH': 'GS2.1.s1760815801$o4$g1$t1760815810$j51$l0$h2000304167',
-    '_csrf': 'HjJ31fyptwu5G3DbNMGJa7oi8NGrlCUGNohidNubfNZ7exiEsuT-WsFKOuJggLAZgxeCn9HiXUBayQc4vdIruA%3D%3D',
+    '_csrf': 'mWBJPoZ8DOUpIKLYOh9eN8f4Pg6TRvw7RjAK8Z4cjiSoBRha6yN-v3h30esNKRNFl7xoON8UzFN0CTiXrlm_HA%3D%3D',
+    '_ga_5WDMLTHHFH': 'GS2.1.s1760869117$o5$g1$t1760869173$j4$l0$h1711629522',
         }
         self.auth_fingerprint = None
         
@@ -81,7 +81,7 @@ class BraintreeChecker:
                 'clientSdkMetadata': {
                     'source': 'client',
                     'integration': 'custom',
-                    'sessionId': 'd3476c80-4375-4d45-a2e6-159f7ab8e382',
+                    'sessionId': 'a9ff5803-287a-4f4d-9011-9a2717013fea',
                 },
                 'query': 'mutation TokenizeCreditCard($input: TokenizeCreditCardInput!) {   tokenizeCreditCard(input: $input) {     token     creditCard {       bin       brandCode       last4       binData {         issuingBank         countryOfIssuance       }     }   } }',
                 'variables': {
@@ -139,8 +139,8 @@ class BraintreeChecker:
                 'clientMetadata': {
                     'requestedThreeDSecureVersion': '2',
                     'sdkVersion': 'web/3.124.0',
-                    'cardinalDeviceDataCollectionTimeElapsed': 5,
-                    'issuerDeviceDataCollectionTimeElapsed': 2787,
+                    'cardinalDeviceDataCollectionTimeElapsed': 346,
+                    'issuerDeviceDataCollectionTimeElapsed': 3581,
                     'issuerDeviceDataCollectionResult': True,
                 },
                 'authorizationFingerprint': self.auth_fingerprint,
@@ -152,7 +152,7 @@ class BraintreeChecker:
                     'source': 'client',
                     'integration': 'custom',
                     'integrationType': 'custom',
-                    'sessionId': 'd3476c80-4375-4d45-a2e6-159f7ab8e382',
+                    'sessionId': 'a9ff5803-287a-4f4d-9011-9a2717013fea',
                 },
             }
             
