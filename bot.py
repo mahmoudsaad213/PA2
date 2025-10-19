@@ -18,7 +18,7 @@ bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 user_cards = {}
 checking_status = {}
 
-# ألوان للطباعة (للاختبار المحلي فقط)
+# ألوان للطباعة (للاختبار المحلي)
 GREEN = "\033[92m"
 YELLOW = "\033[93m"
 RED = "\033[91m"
@@ -157,9 +157,17 @@ class StripeChecker:
                     }
 
             if 'error' in setup_intent:
+                error_message = setup_intent['error'].get('message', 'Unknown error')
+                if error_message.startswith('3D Secure 2 is not supported'):
+                    return {
+                        'status': 'DECLINED',
+                        'message': '❌ 3D Secure 2 Not Supported',
+                        'details': {},
+                        'time': round(time.time() - start_time, 2)
+                    }
                 return {
                     'status': 'ERROR',
-                    'message': f'Setup Intent Error - {setup_intent["error"]["message"]}',
+                    'message': f'Setup Intent Error - {error_message}',
                     'details': {},
                     'time': round(time.time() - start_time, 2)
                 }
@@ -189,13 +197,6 @@ class StripeChecker:
                 acs_url = three_ds_response.get('ares', {}).get('acsURL')
 
                 details = {'status_3ds': trans_status or 'N/A'}
-                if 'error' in three_ds_response and three_ds_response['error'].get('message', '').startswith('3D Secure 2 is not supported'):
-                    return {
-                        'status': 'DECLINED',
-                        'message': '❌ 3D Secure 2 Not Supported',
-                        'details': details,
-                        'time': round(time.time() - start_time, 2)
-                    }
                 if trans_status == 'N':
                     return {
                         'status': 'LIVE',
