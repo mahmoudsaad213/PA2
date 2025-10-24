@@ -11,7 +11,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # إعدادات البوت
 TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-VALID_KEY = "YOUR_VALID_KEY"  # استبدل بمفتاح الصلاحية
+VALID_KEY = "saad"  # استبدل بمفتاح الصلاحية
 INVOICE_ID = "260528"
 
 bot = telebot.TeleBot(TOKEN)
