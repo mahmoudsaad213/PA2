@@ -7,6 +7,8 @@ import urllib3
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import sys
+import os
+import psutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -15,7 +17,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Telegram Bot Token
 TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-bot = telebot.TeleBot(TOKEN, threaded=False)  # Disable threaded polling to prevent conflicts
+bot = telebot.TeleBot(TOKEN, threaded=False)  # Disable threaded polling
 
 # Invoice and Cookies
 INVOICE_ID = "260528"
@@ -48,6 +50,14 @@ results = []
 current_message_id = None
 stop_checking = False
 last_dashboard_text = ""
+
+def check_single_instance():
+    """Check if another instance of the bot is running."""
+    current_pid = os.getpid()
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        if proc.pid != current_pid and 'python' in proc.info['cmdline'] and 'telegram_bot.py' in proc.info['cmdline']:
+            logging.error("Another bot instance is running. Terminating.")
+            sys.exit(1)
 
 def get_session_data():
     session = requests.Session()
@@ -230,20 +240,16 @@ def update_dashboard(chat_id, message_id):
     keyboard.add(InlineKeyboardButton("Stop Checking", callback_data="stop"))
     text = f"📊 Dashboard\nLive: {dashboard['live']}\nDeclined: {dashboard['declined']}\nError: {dashboard['error']}\n3DS: {dashboard['3ds']}\nChallenge: {dashboard['challenge']}"
     if text != last_dashboard_text:
-        try:
-            bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
-            last_dashboard_text = text
-        except telebot.apihelper.ApiTelegramException as e:
-            if "message is not modified" not in str(e):
-                logging.error(f"Dashboard update error: {str(e)}")
-                if "Bad Request" in str(e):
-                    bot.send_message(chat_id, "Error updating dashboard, retrying...")
+        for _ in range(2):  # Retry twice
+            try:
+                bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
+                last_dashboard_text = text
+                return
+            except telebot.apihelper.ApiTelegramException as e:
+                if "message is not modified" not in str(e):
+                    logging.error(f"Dashboard update error: {str(e)}")
                     time.sleep(1)
-                    try:
-                        bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
-                        last_dashboard_text = text
-                    except Exception as retry_e:
-                        logging.error(f"Retry dashboard update error: {str(retry_e)}")
+        logging.error("Failed to update dashboard after retries")
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -327,9 +333,26 @@ def check_cards(chat_id, message_id):
     bot.send_message(chat_id, "✅ Checking completed.")
 
 if __name__ == "__main__":
-    try:
-        bot.polling(none_stop=True, interval=0, timeout=20)
-    except Exception as e:
-        logging.error(f"Polling error: {str(e)}")
-        time.sleep(5)  # Wait before restarting
-        bot.polling(none_stop=True, interval=0, timeout=20)
+    check_single_instance()  # Ensure only one instance runs
+    max_retries = 5
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+            break  # Exit loop if polling starts successfully
+        except telebot.apihelper.ApiTelegramException as e:
+            if "Conflict: terminated by other getUpdates request" in str(e):
+                logging.error("409 Conflict detected, retrying...")
+                retry_count += 1
+                time.sleep(5 * retry_count)  # Exponential backoff
+            else:
+                logging.error(f"Polling error: {str(e)}")
+                retry_count += 1
+                time.sleep(5)
+        except Exception as e:
+            logging.error(f"Unexpected polling error: {str(e)}")
+            retry_count += 1
+            time.sleep(5)
+    if retry_count >= max_retries:
+        logging.error("Max retries reached, exiting.")
+        sys.exit(1)
