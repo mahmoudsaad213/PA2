@@ -88,7 +88,7 @@ class StripeChecker:
                 stripe_sid = new_cookies2.get('__stripe_sid', '')
             
             return session_id, stripe_mid, stripe_sid
-        except:
+        except Exception as e:
             return None, None, None
     
     def check_card(self, card: Dict) -> Dict:
@@ -497,6 +497,15 @@ def check_cards_thread(user_id, message):
         for j, (card, result) in enumerate(zip(batch, results)):
             checked += 1
             
+            if result['status'] == 'LIVE':
+                live += 1
+            elif result['status'] == 'OTP':
+                otp += 1
+            elif result['status'] == 'DECLINED':
+                declined += 1
+            else:
+                errors += 1
+            
             keyboard = types.InlineKeyboardMarkup(row_width=1)
             keyboard.add(
                 types.InlineKeyboardButton(f"📋 Result: {result['status']}", callback_data=f"show_{checked}"),
@@ -509,7 +518,6 @@ def check_cards_thread(user_id, message):
             )
             
             if result['status'] == 'LIVE':
-                live += 1
                 details = result['details']
                 msg = f"""<b>✅ LIVE CARD
 ━━━━━━━━━━━━━━━━━━━
@@ -525,12 +533,6 @@ def check_cards_thread(user_id, message):
 👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
                 bot.send_message(user_id, msg)
-            elif result['status'] == 'OTP':
-                otp += 1
-            elif result['status'] == 'DECLINED':
-                declined += 1
-            else:
-                errors += 1
             
             user_cards[user_id][i+j]['result'] = result
             
@@ -608,129 +610,218 @@ def show_card_result(call):
 
 🦁 BIN Info:
 ├ Type: {details.get('type', 'Unknown')}
-├ Bank: {details.get('bank', 'Unknown Bank')}
+├ Bank: {details.get('bank', 'Unknown')}
 └ Country: {details.get('country', 'XX')} {details.get('emoji', '🏳️')}
 ━━━━━━━━━━━━━━━━━━━
 👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
+        bot.send_message(user_id, msg)
+    elif result['status'] == 'OTP':
+        otp += 1
+    elif result['status'] == 'DECLINED':
+        declined += 1
+    else:
+        errors += 1
     
-    bot.send_message(user_id, msg)
-    bot.answer_callback_query(call.id, "📋 Result displayed!")
+    user_cards[user_id][i+j]['result'] = result
+    
+    progress = int((checked / total) * 20)
+    progress_bar = f"[{'█' * progress}{'▒' * (20 - progress)}] {int((checked / total) * 100)}%"
+    elapsed = time.time() - start_time
+    speed = checked / elapsed if elapsed > 0 else 0
+    eta = (total - checked) / speed if speed > 0 else 0
+    
+    try:
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            text=f"""<b>🔥 Gateway: Stripe (3 Threads)
+    ━━━━━━━━━━━━━━━━━━━
+    ⏳ Checking in progress...
+    {progress_bar}
+    ⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
+    💳 Current: {card['number'][:6]}...{card['number'][-4:]}
+    </b>""",
+                        reply_markup=keyboard
+                    )
+    except:
+            pass
+            
+            if i + 3 < len(cards):
+                time.sleep(2)
+        
+    total_time = time.time() - start_time
+    bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=message.message_id,
+            text=f"""<b>✅ CHECKING COMPLETED!
+    ━━━━━━━━━━━━━━━━━━━
+    📊 Results Summary:
+    ├ Total Cards: {total}
+    ├ LIVE ✅: {live}
+    ├ OTP 🔐: {otp}
+    ├ Declined ❌: {declined}
+    ├ Errors ⚠️: {errors}
+
+    ⏱ Stats:
+    ├ Time: {int(total_time)}s
+    └ Speed: {(total/total_time):.2f} cards/sec
+    ━━━━━━━━━━━━━━━━━━━
+    🎉 Thank you for using the bot!
+    👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+    </b>"""
+        )
+        
+    checking_status[user_id] = False
+    del user_cards[user_id]
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('show_'))
+def show_card_result(call):
+        user_id = call.from_user.id
+        index = int(call.data.split('_')[-1]) - 1
+        
+        if user_id not in user_cards or index >= len(user_cards[user_id]):
+            bot.answer_callback_query(call.id, "❌ No result!")
+            return
+        
+        card = user_cards[user_id][index]
+        result = card.get('result', {})
+        details = result.get('details', {})
+        
+        msg = f"""<b>{result.get('message', '❓ Unknown')}
+    ━━━━━━━━━━━━━━━━━━━
+    💳 Card: <code>{card['raw']}</code>
+    📊 Status: {result.get('status', 'Unknown')}
+    ⏱ Time: {result.get('time', 0)} sec"""
+        
+        if details:
+            msg += f"""
+
+    🦁 BIN Info:
+    ├ Type: {details.get('type', 'Unknown')}
+    ├ Bank: {details.get('bank', 'Unknown Bank')}
+    └ Country: {details.get('country', 'XX')} {details.get('emoji', '🏳️')}
+    ━━━━━━━━━━━━━━━━━━━
+    👨‍💻 By: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+    </b>"""
+        
+        bot.send_message(user_id, msg)
+        bot.answer_callback_query(call.id, "📋 Result displayed!")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'stop_check')
 def stop_checking(call):
-    user_id = call.from_user.id
-    checking_status[user_id] = False
-    bot.answer_callback_query(call.id, "✅ Checking stopped!")
+        user_id = call.from_user.id
+        checking_status[user_id] = False
+        bot.answer_callback_query(call.id, "✅ Checking stopped!")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'x')
 def dummy_handler(call):
     bot.answer_callback_query(call.id, "📊 Live Status")
 
-@bot.message_handler(commands=['help'])
-@check_authorization
-def help_message(message):
-    help_text = """<b>📚 Bot Commands & Usage:
-━━━━━━━━━━━━━━━━━━━
-/start - Start the bot
-/help - Show this message
-/status - Check bot status
-/key - Enter access key
+    @bot.message_handler(commands=['help'])
+    @check_authorization
+    def help_message(message):
+        help_text = """<b>📚 Bot Commands & Usage:
+    ━━━━━━━━━━━━━━━━━━━
+    /start - Start the bot
+    /help - Show this message
+    /status - Check bot status
+    /key - Enter access key
 
-📤 How to use:
-1. Send a combo file (.txt)
-2. Click "Start Checking"
-3. Bot checks 3 cards simultaneously
-4. Only LIVE cards sent directly
+    📤 How to use:
+    1. Send a combo file (.txt)
+    2. Click "Start Checking"
+    3. Bot checks 3 cards simultaneously
+    4. Only LIVE cards sent directly
 
-📝 Combo Format:
-Card|MM|YYYY|CVV
+    📝 Combo Format:
+    Card|MM|YYYY|CVV
 
-Example:
-5127740080852575|03|2027|825
-━━━━━━━━━━━━━━━━━━━
-👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-    bot.send_message(message.chat.id, help_text)
+    Example:
+    5127740080852575|03|2027|825
+    ━━━━━━━━━━━━━━━━━━━
+    👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+    </b>"""
+        bot.send_message(message.chat.id, help_text)
 
-@bot.message_handler(commands=['status'])
-@check_authorization
-def status_message(message):
-    status_text = """<b>🟢 Bot Status: ONLINE
-━━━━━━━━━━━━━━━━━━━
-⚡ Gateway: Stripe Payment
-🔥 Threads: 3 Parallel
-✅ Accuracy: High
-🌐 Server: Active
-━━━━━━━━━━━━━━━━━━━
-👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
-</b>"""
-    bot.send_message(message.chat.id, status_text)
+    @bot.message_handler(commands=['status'])
+    @check_authorization
+    def status_message(message):
+        status_text = """<b>🟢 Bot Status: ONLINE
+    ━━━━━━━━━━━━━━━━━━━
+    ⚡ Gateway: Stripe Payment
+    🔥 Threads: 3 Parallel
+    ✅ Accuracy: High
+    🌐 Server: Active
+    ━━━━━━━━━━━━━━━━━━━
+    👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
+    </b>"""
+        bot.send_message(message.chat.id, status_text)
 
-@bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    # التحقق من الصلاحيات أولاً
-    if not is_authorized(message.from_user.id):
-        bot.send_message(
-            message.chat.id,
-            """<b>🔒 Access Denied!
-━━━━━━━━━━━━━━━━━━━
-⚠️ You need authorization to use this bot.
+    @bot.message_handler(func=lambda message: True)
+    def handle_text(message):
+        # التحقق من الصلاحيات أولاً
+        if not is_authorized(message.from_user.id):
+            bot.send_message(
+                message.chat.id,
+                """<b>🔒 Access Denied!
+    ━━━━━━━━━━━━━━━━━━━
+    ⚠️ You need authorization to use this bot.
 
-📝 Send your key:
-<code>/key YOUR_KEY</code>
-</b>"""
-        )
-        return
-    
-    text = message.text.strip()
-    if '|' in text and len(text.split('|')) == 4:
-        parts = text.split('|')
-        user_cards[message.from_user.id] = [{
-            'number': parts[0].strip(),
-            'month': parts[1].strip().zfill(2),
-            'year': parts[2].strip(),
-            'cvv': parts[3].strip(),
-            'raw': text
-        }]
-        checking_status[message.from_user.id] = False
+    📝 Send your key:
+    <code>/key YOUR_KEY</code>
+    </b>"""
+            )
+            return
         
-        keyboard = types.InlineKeyboardMarkup(row_width=2)
-        keyboard.add(types.InlineKeyboardButton("🚀 Start Checking", callback_data='start_check'))
-        
-        bot.send_message(
-            chat_id=message.chat.id,
-            text=f"""<b>✅ Card Loaded!
-━━━━━━━━━━━━━━━━━━━
-💳 Card: <code>{parts[0][:6]}...{parts[0][-4:]}</code>
-🔥 Gateway: Stripe Payment
-⚡ Status: Ready
-</b>""",
-            reply_markup=keyboard
-        )
-    else:
-        bot.reply_to(message, """<b>❌ Invalid format!
-Use: Card|MM|YYYY|CVV
-Example: 5127740080852575|03|2027|825
-</b>""")
+        text = message.text.strip()
+        if '|' in text and len(text.split('|')) == 4:
+            parts = text.split('|')
+            user_cards[message.from_user.id] = [{
+                'number': parts[0].strip(),
+                'month': parts[1].strip().zfill(2),
+                'year': parts[2].strip(),
+                'cvv': parts[3].strip(),
+                'raw': text
+            }]
+            checking_status[message.from_user.id] = False
+            
+            keyboard = types.InlineKeyboardMarkup(row_width=2)
+            keyboard.add(types.InlineKeyboardButton("🚀 Start Checking", callback_data='start_check'))
+            
+            bot.send_message(
+                chat_id=message.chat.id,
+                text=f"""<b>✅ Card Loaded!
+    ━━━━━━━━━━━━━━━━━━━
+    💳 Card: <code>{parts[0][:6]}...{parts[0][-4:]}</code>
+    🔥 Gateway: Stripe Payment
+    ⚡ Status: Ready
+    </b>""",
+                reply_markup=keyboard
+            )
+        else:
+            bot.reply_to(message, """<b>❌ Invalid format!
+    Use: Card|MM|YYYY|CVV
+    Example: 5127740080852575|03|2027|825
+    </b>""")
 
-# ═══════════════════════════════════════
-# 🚀 START BOT
-# ═══════════════════════════════════════
-if __name__ == "__main__":
-    print("=" * 50)
-    print("🚀 Starting Stripe Checker Bot...")
-    print("=" * 50)
-    print(f"👤 Admin ID: {ADMIN_ID}")
-    print(f"🔑 Access Key: {VALID_KEY}")
-    print(f"💳 Invoice ID: {INVOICE_ID}")
-    print("✅ Bot is running...")
-    print("=" * 50)
-    print("\n⚠️  IMPORTANT NOTES:")
-    print("• Users must enter key to access: /key A3S_VIP_2025")
-    print("• Bot checks 3 cards simultaneously")
-    print("• Only LIVE cards are sent directly")
-    print("• Other results shown via button")
-    print("=" * 50)
-    
-    bot.polling(none_stop=True)
+    # ═══════════════════════════════════════
+    # 🚀 START BOT
+    # ═══════════════════════════════════════
+    if __name__ == "__main__":
+        print("=" * 50)
+        print("🚀 Starting Stripe Checker Bot...")
+        print("=" * 50)
+        print(f"👤 Admin ID: {ADMIN_ID}")
+        print(f"🔑 Access Key: {VALID_KEY}")
+        print(f"💳 Invoice ID: {INVOICE_ID}")
+        print("✅ Bot is running...")
+        print("=" * 50)
+        print("\n⚠️  IMPORTANT NOTES:")
+        print("• Users must enter key to access: /key A3S_VIP_2025")
+        print("• Bot checks 3 cards simultaneously")
+        print("• Only LIVE cards are sent directly")
+        print("• Other results shown via button")
+        print("=" * 50)
+        
+        bot.polling(none_stop=True)
