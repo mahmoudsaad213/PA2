@@ -42,6 +42,7 @@ cards = []
 results = []
 current_message_id = None
 stop_checking = False
+last_dashboard_text = ""
 
 def get_session_data():
     session = requests.Session()
@@ -49,10 +50,15 @@ def get_session_data():
     try:
         session.post(f'https://vsys.host/index.php?rp=/invoice/{INVOICE_ID}/pay', 
                     data=data, cookies=cookies, verify=False, timeout=10)
+    except requests.exceptions.ConnectTimeout:
+        return None, None, None
     except:
         pass
-    resp = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', 
-                       cookies=cookies, verify=False, timeout=10)
+    try:
+        resp = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', 
+                          cookies=cookies, verify=False, timeout=10)
+    except requests.exceptions.ConnectTimeout:
+        return None, None, None
     m = re.search(r'https://checkout\.stripe\.com/[^\s\'"]+', resp.text)
     if not m or '/pay/' not in m.group(0):
         return None, None, None
@@ -62,10 +68,13 @@ def get_session_data():
     stripe_sid = new_cookies.get('__stripe_sid', '')
     if not stripe_sid:
         time.sleep(2)
-        resp2 = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', 
-                           cookies=cookies, verify=False, timeout=10)
-        new_cookies2 = session.cookies.get_dict()
-        stripe_sid = new_cookies2.get('__stripe_sid', '')
+        try:
+            resp2 = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', 
+                               cookies=cookies, verify=False, timeout=10)
+            new_cookies2 = resp2.cookies.get_dict()
+            stripe_sid = new_cookies2.get('__stripe_sid', '')
+        except requests.exceptions.ConnectTimeout:
+            return None, None, None
     return session_id, stripe_mid, stripe_sid
 
 def check_card(card, index):
@@ -194,6 +203,7 @@ def check_card(card, index):
         dashboard["error"] += 1
 
 def update_dashboard(chat_id, message_id):
+    global last_dashboard_text
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton(f"Live: {dashboard['live']}", callback_data="live"))
     keyboard.add(InlineKeyboardButton(f"Declined: {dashboard['declined']}", callback_data="declined"))
@@ -202,7 +212,13 @@ def update_dashboard(chat_id, message_id):
     keyboard.add(InlineKeyboardButton(f"Challenge: {dashboard['challenge']}", callback_data="challenge"))
     keyboard.add(InlineKeyboardButton("Stop Checking", callback_data="stop"))
     text = f"📊 Dashboard\nLive: {dashboard['live']}\nDeclined: {dashboard['declined']}\nError: {dashboard['error']}\n3DS: {dashboard['3ds']}\nChallenge: {dashboard['challenge']}"
-    bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
+    if text != last_dashboard_text:
+        try:
+            bot.edit_message_text(text, chat_id, message_id, reply_markup=keyboard)
+            last_dashboard_text = text
+        except telebot.apihelper.ApiTelegramException as e:
+            if "message is not modified" not in str(e):
+                raise e
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -225,18 +241,19 @@ def callback_query(call):
         bot.answer_callback_query(call.id, "Checking stopped")
 
 def process_single_card(message):
-    global checking, cards, results, current_message_id
+    global checking, cards, results, current_message_id, last_dashboard_text
     if checking:
         bot.reply_to(message, "Checking in progress, please wait.")
         return
     checking = True
     cards = [message.text]
     results = [None]
+    last_dashboard_text = ""
     current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
     threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
 
 def process_combo_file(message):
-    global checking, cards, results, current_message_id
+    global checking, cards, results, current_message_id, last_dashboard_text
     if checking:
         bot.reply_to(message, "Checking in progress, please wait.")
         return
@@ -244,12 +261,17 @@ def process_combo_file(message):
         bot.reply_to(message, "Please upload a text file.")
         checking = False
         return
-    file_info = bot.get_file(message.document.file_id)
-    file = bot.download_file(file_info.file_path)
-    cards = file.decode('utf-8').splitlines()
-    results = [None] * len(cards)
-    current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
-    threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
+    try:
+        file_info = bot.get_file(message.document.file_id)
+        file = bot.download_file(file_info.file_path)
+        cards = file.decode('utf-8').splitlines()
+        results = [None] * len(cards)
+        last_dashboard_text = ""
+        current_message_id = bot.send_message(message.chat.id, "📊 Dashboard\nStarting check...")
+        threading.Thread(target=check_cards, args=(message.chat.id, current_message_id.message_id)).start()
+    except Exception as e:
+        bot.reply_to(message, f"Error processing file: {str(e)[:50]}")
+        checking = False
 
 def check_cards(chat_id, message_id):
     global checking, stop_checking, dashboard
