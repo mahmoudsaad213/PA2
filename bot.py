@@ -8,7 +8,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import logging
 import sys
 import os
-import psutil
+import fcntl
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -50,14 +50,24 @@ results = []
 current_message_id = None
 stop_checking = False
 last_dashboard_text = ""
+lock_file = "/tmp/telegram_bot.lock"
 
-def check_single_instance():
-    """Check if another instance of the bot is running."""
-    current_pid = os.getpid()
-    for proc in psutil.process_iter(['pid', 'cmdline']):
-        if proc.pid != current_pid and 'python' in proc.info['cmdline'] and 'telegram_bot.py' in proc.info['cmdline']:
-            logging.error("Another bot instance is running. Terminating.")
-            sys.exit(1)
+def acquire_lock():
+    """Ensure only one instance of the bot is running using a lock file."""
+    try:
+        fd = open(lock_file, 'w')
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except IOError:
+        logging.error("Another bot instance is running. Terminating.")
+        sys.exit(1)
+
+def release_lock(fd):
+    """Release the lock file."""
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    fd.close()
+    if os.path.exists(lock_file):
+        os.remove(lock_file)
 
 def get_session_data():
     session = requests.Session()
@@ -333,26 +343,29 @@ def check_cards(chat_id, message_id):
     bot.send_message(chat_id, "✅ Checking completed.")
 
 if __name__ == "__main__":
-    check_single_instance()  # Ensure only one instance runs
-    max_retries = 5
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
-            break  # Exit loop if polling starts successfully
-        except telebot.apihelper.ApiTelegramException as e:
-            if "Conflict: terminated by other getUpdates request" in str(e):
-                logging.error("409 Conflict detected, retrying...")
-                retry_count += 1
-                time.sleep(5 * retry_count)  # Exponential backoff
-            else:
-                logging.error(f"Polling error: {str(e)}")
+    lock_fd = acquire_lock()  # Acquire lock to prevent multiple instances
+    try:
+        max_retries = 5
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                bot.polling(none_stop=True, interval=0, timeout=20)
+                break  # Exit loop if polling starts successfully
+            except telebot.apihelper.ApiTelegramException as e:
+                if "Conflict: terminated by other getUpdates request" in str(e):
+                    logging.error("409 Conflict detected, retrying...")
+                    retry_count += 1
+                    time.sleep(5 * retry_count)  # Exponential backoff
+                else:
+                    logging.error(f"Polling error: {str(e)}")
+                    retry_count += 1
+                    time.sleep(5)
+            except Exception as e:
+                logging.error(f"Unexpected polling error: {str(e)}")
                 retry_count += 1
                 time.sleep(5)
-        except Exception as e:
-            logging.error(f"Unexpected polling error: {str(e)}")
-            retry_count += 1
-            time.sleep(5)
-    if retry_count >= max_retries:
-        logging.error("Max retries reached, exiting.")
-        sys.exit(1)
+        if retry_count >= max_retries:
+            logging.error("Max retries reached, exiting.")
+            sys.exit(1)
+    finally:
+        release_lock(lock_fd)  # Release lock on exit
