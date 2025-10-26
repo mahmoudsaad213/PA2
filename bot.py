@@ -17,7 +17,7 @@ BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_IDS = [5895491379,844663875]
 
 # بيانات تسجيل الدخول
-USERNAME = "freska2234@gmail.com"
+USERNAME = "d78gvxwo0g@cmhvzylmfc.com"
 PASSWORD = "111222333Mm"
 LOGIN_URL = "https://my.knownhost.com/client/login"
 AUTH_COOKIES_FILE = "auth_cookies.json"
