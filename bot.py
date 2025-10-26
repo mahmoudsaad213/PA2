@@ -228,47 +228,26 @@ async def check_card(card, bot_app):
 
 # ========== دالات البوت ==========
 async def send_result(bot_app, card, status_type, message):
-    """إرسال نتيجة الفحص كزر"""
+    """إرسال نتيجة الفحص"""
     if not stats['chat_id']:
         return
-    
-    emoji_map = {
-        'APPROVED': '✅',
-        'REJECTED': '❌',
-        '3D_SECURE': '⚠️',
-        'AUTH_ATTEMPTED': '🔄',
-        'ERROR': '⚠️',
-        'EXCEPTION': '💥',
-        'UNKNOWN': '❓'
-    }
-    
-    emoji = emoji_map.get(status_type, '❓')
-    
-    parts = card.split('|')
-    cc = parts[0] if len(parts) > 0 else "****"
-    masked = f"{cc[:6]}******{cc[-4:]}"
-    
-    keyboard = [
-        [InlineKeyboardButton(f"💳 {masked}", callback_data="card_info")],
-        [InlineKeyboardButton(f"{emoji} {message[:35]}", callback_data="response_info")],
-        [InlineKeyboardButton(f"⏰ {datetime.now().strftime('%H:%M:%S')}", callback_data="time_info")]
-    ]
     
     # إرسال APPROVED و AUTH_ATTEMPTED و 3D_SECURE
     if status_type in ['APPROVED', 'AUTH_ATTEMPTED', '3D_SECURE']:
         try:
+            # حساب رقم الكارت
+            card_number = stats['approved'] + stats['auth_attempted'] + stats['secure_3d']
+            
             if status_type == 'APPROVED':
-                text = f"🎉 **APPROVED CARD FOUND!**"
+                text = f"━━━━━━━━━━━━━━━\n✅ APPROVED CARD LIVE ✅\n━━━━━━━━━━━━━━━\n💳 {card}\n🔥 Status: Approved\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n━━━━━━━━━━━━━━━"
             elif status_type == 'AUTH_ATTEMPTED':
-                text = f"🔄 **AUTH ATTEMPTED CARD!**"
+                text = f"╔═══════════════╗\n🔄 AUTH ATTEMPTED CARD 🔄\n╚═══════════════╝\n💳 {card}\n🔥 Status: Auth Attempted\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n╚═══════════════╝"
             else:
-                text = f"⚠️ **3D SECURE CARD!**"
+                text = f"┏━━━━━━━━━━━━━━━┓\n⚠️ 3D SECURE CARD ⚠️\n┗━━━━━━━━━━━━━━━┛\n💳 {card}\n🔥 Status: 3D Secure\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n┗━━━━━━━━━━━━━━━┛"
             
             await bot_app.bot.send_message(
                 chat_id=stats['chat_id'],
-                text=text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
+                text=text
             )
         except:
             pass
