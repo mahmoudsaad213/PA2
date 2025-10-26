@@ -525,8 +525,8 @@ async def process_cards(cards, bot_app):
         if not stats['is_running']:
             break
         
-        # تجديد الكوكيز كل 100 فيزا
-        if stats['cards_checked'] > 0 and stats['cards_checked'] % 100 == 0:
+        # تجديد الكوكيز كل 50 فيزا
+        if stats['cards_checked'] > 0 and stats['cards_checked'] % 50 == 0:
             print(f"[🔄] تم فحص {stats['cards_checked']} بطاقة، جاري تجديد الكوكيز...")
             if refresh_cookies_if_needed():
                 print("[✅] تم تجديد الكوكيز بنجاح!")
