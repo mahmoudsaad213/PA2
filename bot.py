@@ -17,23 +17,23 @@ BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_IDS = [5895491379,844663875]
 
 # بيانات تسجيل الدخول
-USERNAME = "freska2234@gmail.com"
+USERNAME = "lepsehimlu1@gmail.com"
 PASSWORD = "111222333Mm"
 LOGIN_URL = "https://my.knownhost.com/client/login"
 AUTH_COOKIES_FILE = "auth_cookies.json"
 
 # الـ Cookies الثابتة
 BASE_COOKIES = {
-    '_gcl_au': '1.1.1731755719.1761294273',
-    'PAPVisitorId': '7095f26325c875e9da4fdaa66171apP6',
-    '_fbp': 'fb.1.1761298965302.822697239648290722',
-    'lhc_per': 'vid|8994dfb5d60d3132fabe',
+    '_gcl_au': '1.1.1656495453.1761566510',
+    '_fbp': 'fb.1.1761566510176.447075908158758186',
+    '_gid': 'GA1.2.1108695523.1761566510',
     '__mmapiwsid': '0199d361-1f43-7b6b-9c97-250e8a6a95db:0664b174ef7b3925be07d4b964be6a38b1029da7',
-    '_gid': 'GA1.2.1609015390.1761435403',
-    '_rdt_uuid': '1761294274156.8dd9903d-c9cf-401b-885d-0dad4931526f',
-    '_uetsid': 'a2028140b1fa11f086cd03ee33166b9d',
+    'blesta_sid': 'ita9j401nsogttunbvqdg4jvcd',
+    '_rdt_uuid': '1761566510589.7a69df10-0880-4414-9ab7-aaf2ec17d153',
+    '_uetsid': 'd734d2e0b32b11f09437011d78aac95c',
     '_uetvid': 'df284260b0b211f086cb537b4a717cc2',
-    '_ga': 'GA1.2.586933227.1761298965',
+    '_ga': 'GA1.2.406309827.1761566510',
+    '_ga_ME5XD3CP95': 'GS2.1.s1761566510$o1$g1$t1761566552$j18$l0$h0',
 }
 
 HEADERS = {
