@@ -424,7 +424,11 @@ async def send_final_files(bot_app):
 
 # ========== معالجات البوت ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
+    """معالج أمر /start"""
+    user_id = update.effective_user.id
+    print(f"[📥] /start command from user: {user_id}")
+    
+    if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
         return
     
@@ -433,13 +437,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📊 **OPAYO CARD CHECKER BOT**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
-        f"📢 القناة: `{CHANNEL_ID}`",
+        f"📢 القناة: `{CHANNEL_ID}`\n\n"
+        "✅ البوت شغال وجاهز!",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
+    """معالج الملفات"""
+    user_id = update.effective_user.id
+    print(f"[📥] File received from user: {user_id}")
+    
+    if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح")
         return
     
@@ -554,14 +563,28 @@ async def process_cards(cards, bot_app):
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
+    """معالج الرسائل النصية"""
+    user_id = update.effective_user.id
+    print(f"[📥] Message from user: {user_id}")
+    
+    if user_id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
         return
+    
+    await update.message.reply_text(
+        "👋 مرحباً!\n\n"
+        "استخدم /start لبدء البوت\n"
+        "أو أرسل ملف .txt مباشرة"
+    )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالج الأزرار"""
     query = update.callback_query
+    user_id = query.from_user.id
     
-    if query.from_user.id not in ADMIN_IDS:
+    print(f"[📥] Button callback from user: {user_id}, data: {query.data}")
+    
+    if user_id not in ADMIN_IDS:
         await query.answer("❌ غير مصرح", show_alert=True)
         return
     
@@ -571,20 +594,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stats['is_running'] = False
         await update_dashboard(context.application)
         await query.message.reply_text("🛑 تم إيقاف الفحص!")
+    elif query.data == "send_file":
+        await query.message.reply_text(
+            "📁 أرسل ملف .txt يحتوي على البطاقات\n"
+            "الصيغة: `رقم|شهر|سنة|cvv`",
+            parse_mode='Markdown'
+        )
 
 def main():
+    """الدالة الرئيسية"""
+    print("=" * 50)
     print("[🤖] Starting Opayo Telegram Bot...")
     print(f"[📢] Channel ID: {CHANNEL_ID}")
+    print(f"[👤] Admin IDs: {ADMIN_IDS}")
+    print("=" * 50)
     
+    # إنشاء التطبيق
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("[✅] Bot is running...")
-    app.run_polling(drop_pending_updates=True)
+    print("[✅] Bot handlers registered successfully!")
+    print("[🔄] Starting polling...")
+    
+    # بدء البوت
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
 
-if __name__ == "__main__":
-    main()
+if
