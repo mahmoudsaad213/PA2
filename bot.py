@@ -375,13 +375,16 @@ def handle_cards(message):
 # MAIN
 # ============================================================
 
-if __name__ == "__main__":
-    print("=" * 70)
-    print("           OPAYO TELEGRAM BOT CHECKER")
-    print("=" * 70)
-    print(f"\n✅ Bot started successfully!")
-    print(f"📡 Waiting for messages...\n")
-    print("=" * 70)
+def main():
+    print("[🤖] Starting Opayo Telegram Bot...")
+    print(f"[📢] Channel ID: {CHANNEL_ID}")
     
-    # Start bot
-    bot.polling(none_stop=True)
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    
+    print("[✅] Bot is running...")
+    app.run_polling(drop_pending_updates=True)  # 🔥 ضيف drop_pending_updates=True
