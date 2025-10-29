@@ -29,19 +29,17 @@ PARAMS = {"pEx": "4"}
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 
 initial_cookies = {
+    'wt_mcp_sid': '3468063752',
     'lantern': 'acae1b5d-f800-4e2d-8364-1492a117d8c1',
     'wtstp_nv': '1',
     'wtstp_nv_s': '1',
-    'wt_mcp_sid': '2802285916',
     'LPVID': 'IxZmZhMDIxYWNlNjkyNzdl',
-    'LPSID-66449020': 'w51M_sGJTImLyqQzMUc-5Q',
     '.AspNet.Consent': 'yes',
     '_ra_func': 'true',
     '_ra_perf': 'true',
     '_ra_adv': 'true',
     '_ra_Initial': 'true',
     '_ga': 'GA1.1.932453915.1761758104',
-    '__hstc': '57241397.72c5200adc9d6d8ebf2d8ae05e71125a.1761758106430.1761758106430.1761758106430.1',
     'hubspotutk': '72c5200adc9d6d8ebf2d8ae05e71125a',
     '__hssrc': '1',
     'CustomSearchUser': '20b5a52d-3c49-4540-bd99-834c3c36990e',
@@ -51,6 +49,14 @@ initial_cookies = {
     'ra_BAS': 'L3ZduBJfweo2kca9khjBJw%3D%3D',
     '.AspNetCore.Antiforgery.ewfMgV3Kz2g': 'CfDJ8IAvExQjoXNFuGlpY7xOM3RJzu-LaHt3ii3ADRgdoUH2nWn91Z-nGVVQb7zFGSnKrf4OKgLW_1sCCyJM3QAdF0_1V96pbpRy-2ZwyL6uKyz8QnMzqpbhEsxcIk2K2-KGkeBTknIKzJCy_HC7TlFc4ys',
     'ra_session': 'CfDJ8IAvExQjoXNFuGlpY7xOM3TJD4kqy8kVk6kVCtL1MaLncrAvGsYfuqvAKguiOqqIJ5nvChsN4WyCrXhVAOYEUoSvxN%2BhdhENvJ96YY1RhQ5TwZaSqC9ldGBNg6VqC0aaxR4Dv44R3jIzmMKkYD6VbGlf%2BK%2BdqAWgWCUp3e8Vz3UG',
+    '_gcl_au': '1.1.394309076.1761758104.1753300075.1761758164.1761758184',
+    '__hstc': '57241397.72c5200adc9d6d8ebf2d8ae05e71125a.1761758106430.1761768107507.1761770854661.4',
+    'LPSID-66449020': 'buUqLAEyToSKNtJgGIQ_Ow',
+    '_uetsid': 'cf8ce310b4ea11f092a253e4dec2b509',
+    '_uetvid': 'cf8cc6d0b4ea11f0834afb0053d84740',
+    '_ga_746MCRLCR7': 'GS2.1.s1761770849$o4$g1$t1761772513$j59$l0$h0',
+    '__hssc': '57241397.8.1761770854661',
+    'wtstp_rla': '948385406878459%2C95%2C1761770848611',
 }
 
 # ========== إحصائيات ==========
