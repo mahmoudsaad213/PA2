@@ -52,11 +52,11 @@ initial_cookies = {
     'ra_BAS': '2GpD%2BZdxQTs2kca9khjBJw%3D%3D',
     'ra_session': 'CfDJ8IAvExQjoXNFuGlpY7xOM3Qv6%2BUb2O51Ehm285Kbieqo3Lh8cPJRiSYVrSqoUszEbIYNURoowci38oWirdc%2FeQdLrDvYpB2gLvW1VhAcNJPS051mVHVnPKcNwMUx68L%2FRbMBK6eDM18iq5tA3HSVJp2MsxxVG1fzX%2FCS%2Bjkf8f5r',
     '_gcl_au': '1.1.965894969.1761912709.450179151.1761912803.1761912866',
-    '_ga_746MCRLCR7': 'GS2.1.s1761912709$o1$g1$t1761912886$j5$l0$h0',
+    '_ga_746MCRLCR7': 'GS2.1.s1761912709$o1$g1$t1761912901$j59$l0$h0',
     '_uetsid': 'c7d84c10b65211f0888e855f3f1a61d8',
     '_uetvid': 'c7d878a0b65211f09a242790bd65b4ca',
-    '__hssc': '57241397.10.1761912714039',
-    'wtstp_rla': '948385406878459%2C128%2C1761912711399',
+    '__hssc': '57241397.11.1761912714039',
+    'wtstp_rla': '948385406878459%2C142%2C1761912711399',
 }
 
 # ========== إحصائيات ==========
