@@ -56,7 +56,7 @@ def get_next_proxy():
     return proxy_dict, proxy_display
 
 # بيانات تسجيل الدخول
-USERNAME = "lepsehimlu1@gmail.com"
+USERNAME = "asf32627@st.com"
 PASSWORD = "111222333Mm"
 LOGIN_URL = "https://my.knownhost.com/client/login"
 AUTH_COOKIES_FILE = "auth_cookies.json"
