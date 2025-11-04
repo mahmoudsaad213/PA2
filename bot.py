@@ -764,57 +764,6 @@ class MessageFormatter:
 [🥷] ミ★ 𝘖𝘸𝘯𝘦𝘳 ★彡 ↯ - {OWNER_NAME} - 🥷↯
 """
         return message.strip()
-    # ============= Bot Handlers =============
-
-@bot.message_handler(commands=['start'])
-def start_command(message):
-    user_id = message.from_user.id
-    welcome_text = f"""
-🎯 Welcome to Card Checker Bot! 🎯
-
-👤 Owner: {OWNER_NAME}
-📢 Channel: {OWNER_CHANNEL}
-
-📋 Commands:
-/login - Login to portal
-/check - Check cards
-/stop - Stop checking
-/results - View results
-
-Send cards in format:
-4532xxxxxxxx|12|2025|123
-"""
-    bot.reply_to(message, welcome_text)
-
-@bot.message_handler(commands=['login'])
-def login_command(message):
-    msg = bot.reply_to(message, "Please send login credentials in format:\nemail|password")
-    bot.register_next_step_handler(msg, process_login)
-
-def process_login(message):
-    try:
-        user_id = message.from_user.id
-        creds = message.text.strip().split('|')
-        
-        if len(creds) != 2:
-            bot.reply_to(message, "❌ Invalid format! Use: email|password")
-            return
-        
-        email, password = creds
-        session = session_manager.get_session(user_id)
-        checker = session['checker']
-        
-        bot.reply_to(message, "🔄 Logging in...")
-        
-        if checker.login_to_portal(email, password):
-            session['logged_in'] = True
-            session['email'] = email
-            bot.reply_to(message, f"✅ Login successful!\nEmail: {email}")
-        else:
-            bot.reply_to(message, "❌ Login failed! Check credentials.")
-            
-    except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
 
 # ============= Bot Handlers =============
 
@@ -845,6 +794,10 @@ def login_command(message):
 
 def process_login(message):
     try:
+        # Check if message or text is None
+        if not message or not message.text:
+            return
+        
         user_id = message.from_user.id
         creds = message.text.strip().split('|')
         
@@ -866,6 +819,7 @@ def process_login(message):
             bot.reply_to(message, "❌ Login failed! Check credentials.")
             
     except Exception as e:
+        logger.error(f"Login error: {e}")
         bot.reply_to(message, f"❌ Error: {str(e)}")
 
 @bot.message_handler(commands=['check'])
@@ -882,6 +836,10 @@ def check_command(message):
 
 def process_cards(message):
     try:
+        # Check if message or text is None
+        if not message or not message.text:
+            return
+        
         user_id = message.from_user.id
         session = session_manager.get_session(user_id)
         
@@ -904,6 +862,7 @@ def process_cards(message):
         session_manager.threads[user_id] = thread
         
     except Exception as e:
+        logger.error(f"Cards processing error: {e}")
         bot.reply_to(message, f"❌ Error: {str(e)}")
 
 def check_cards_batch(user_id: int, cards: List[str]):
@@ -937,8 +896,8 @@ def check_cards_batch(user_id: int, cards: List[str]):
             msg = MessageFormatter.format_card_result(result, user_id)
             try:
                 bot.send_message(user_id, msg)
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to send message: {e}")
             
             time.sleep(0.5)
         
@@ -960,7 +919,10 @@ def check_cards_batch(user_id: int, cards: List[str]):
         
     except Exception as e:
         logger.error(f"Batch check error: {e}")
-        bot.send_message(user_id, f"❌ Error: {str(e)}")
+        try:
+            bot.send_message(user_id, f"❌ Error: {str(e)}")
+        except:
+            pass
 
 @bot.message_handler(commands=['stop'])
 def stop_command(message):
