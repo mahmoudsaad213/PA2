@@ -36,7 +36,7 @@ MAX_THREADS = 5
 MAX_RETRIES = 3
 REQUEST_TIMEOUT = 30
 RATE_LIMIT_DELAY = 1.5
-MAX_CARDS_PER_SESSION = 1000
+MAX_CARDS_PER_SESSION = 5000
 # ============================================
 
 @dataclass
