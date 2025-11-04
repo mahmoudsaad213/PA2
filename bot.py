@@ -764,3 +764,239 @@ class MessageFormatter:
 [🥷] ミ★ 𝘖𝘸𝘯𝘦𝘳 ★彡 ↯ - {OWNER_NAME} - 🥷↯
 """
         return message.strip()
+    # ============= Bot Handlers =============
+
+@bot.message_handler(commands=['start'])
+def start_command(message):
+    user_id = message.from_user.id
+    welcome_text = f"""
+🎯 Welcome to Card Checker Bot! 🎯
+
+👤 Owner: {OWNER_NAME}
+📢 Channel: {OWNER_CHANNEL}
+
+📋 Commands:
+/login - Login to portal
+/check - Check cards
+/stop - Stop checking
+/results - View results
+
+Send cards in format:
+4532xxxxxxxx|12|2025|123
+"""
+    bot.reply_to(message, welcome_text)
+
+@bot.message_handler(commands=['login'])
+def login_command(message):
+    msg = bot.reply_to(message, "Please send login credentials in format:\nemail|password")
+    bot.register_next_step_handler(msg, process_login)
+
+def process_login(message):
+    try:
+        user_id = message.from_user.id
+        creds = message.text.strip().split('|')
+        
+        if len(creds) != 2:
+            bot.reply_to(message, "❌ Invalid format! Use: email|password")
+            return
+        
+        email, password = creds
+        session = session_manager.get_session(user_id)
+        checker = session['checker']
+        
+        bot.reply_to(message, "🔄 Logging in...")
+        
+        if checker.login_to_portal(email, password):
+            session['logged_in'] = True
+            session['email'] = email
+            bot.reply_to(message, f"✅ Login successful!\nEmail: {email}")
+        else:
+            bot.reply_to(message, "❌ Login failed! Check credentials.")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+# ============= Bot Handlers =============
+
+@bot.message_handler(commands=['start'])
+def start_command(message):
+    user_id = message.from_user.id
+    welcome_text = f"""
+🎯 Welcome to Card Checker Bot! 🎯
+
+👤 Owner: {OWNER_NAME}
+📢 Channel: {OWNER_CHANNEL}
+
+📋 Commands:
+/login - Login to portal
+/check - Check cards
+/stop - Stop checking
+/results - View results
+
+Send cards in format:
+4532xxxxxxxx|12|2025|123
+"""
+    bot.reply_to(message, welcome_text)
+
+@bot.message_handler(commands=['login'])
+def login_command(message):
+    msg = bot.reply_to(message, "Please send login credentials in format:\nemail|password")
+    bot.register_next_step_handler(msg, process_login)
+
+def process_login(message):
+    try:
+        user_id = message.from_user.id
+        creds = message.text.strip().split('|')
+        
+        if len(creds) != 2:
+            bot.reply_to(message, "❌ Invalid format! Use: email|password")
+            return
+        
+        email, password = creds
+        session = session_manager.get_session(user_id)
+        checker = session['checker']
+        
+        bot.reply_to(message, "🔄 Logging in...")
+        
+        if checker.login_to_portal(email, password):
+            session['logged_in'] = True
+            session['email'] = email
+            bot.reply_to(message, f"✅ Login successful!\nEmail: {email}")
+        else:
+            bot.reply_to(message, "❌ Login failed! Check credentials.")
+            
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['check'])
+def check_command(message):
+    user_id = message.from_user.id
+    session = session_manager.get_session(user_id)
+    
+    if not session.get('logged_in'):
+        bot.reply_to(message, "❌ Please login first using /login")
+        return
+    
+    msg = bot.reply_to(message, "📤 Send cards to check (one per line):\n4532xxx|12|2025|123")
+    bot.register_next_step_handler(msg, process_cards)
+
+def process_cards(message):
+    try:
+        user_id = message.from_user.id
+        session = session_manager.get_session(user_id)
+        
+        if not session.get('logged_in'):
+            bot.reply_to(message, "❌ Please login first!")
+            return
+        
+        cards = InputValidator.extract_cards_from_text(message.text)
+        
+        if not cards:
+            bot.reply_to(message, "❌ No valid cards found!")
+            return
+        
+        bot.reply_to(message, f"🔄 Starting check for {len(cards)} cards...")
+        
+        # Start checking in background thread
+        thread = threading.Thread(target=check_cards_batch, args=(user_id, cards))
+        thread.daemon = True
+        thread.start()
+        session_manager.threads[user_id] = thread
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error: {str(e)}")
+
+def check_cards_batch(user_id: int, cards: List[str]):
+    """Check cards and send results"""
+    try:
+        session = session_manager.get_session(user_id)
+        checker = session['checker']
+        results = session_manager.get_results(user_id)
+        
+        results['start_time'] = time.time()
+        results['total'] = len(cards)
+        session_manager.stop_flags[user_id] = False
+        
+        for card in cards:
+            if session_manager.stop_flags.get(user_id):
+                break
+            
+            result = checker.test_card(card)
+            
+            # Update counters
+            if result.status == 'Approved':
+                results['approved'] += 1
+            elif result.status == 'Declined':
+                results['declined'] += 1
+            else:
+                results['errors'] += 1
+            
+            results['cards'].append(result)
+            
+            # Send result
+            msg = MessageFormatter.format_card_result(result, user_id)
+            try:
+                bot.send_message(user_id, msg)
+            except:
+                pass
+            
+            time.sleep(0.5)
+        
+        results['end_time'] = time.time()
+        
+        # Send summary
+        summary = f"""
+✅ Checking Complete!
+
+📊 Results:
+- Approved: {results['approved']}
+- Declined: {results['declined']}
+- Errors: {results['errors']}
+- Total: {results['total']}
+
+⏱️ Time: {round(results['end_time'] - results['start_time'], 2)}s
+"""
+        bot.send_message(user_id, summary)
+        
+    except Exception as e:
+        logger.error(f"Batch check error: {e}")
+        bot.send_message(user_id, f"❌ Error: {str(e)}")
+
+@bot.message_handler(commands=['stop'])
+def stop_command(message):
+    user_id = message.from_user.id
+    session_manager.stop_flags[user_id] = True
+    bot.reply_to(message, "⏹️ Stopping checker...")
+
+@bot.message_handler(commands=['results'])
+def results_command(message):
+    user_id = message.from_user.id
+    results = session_manager.get_results(user_id)
+    
+    if results['total'] == 0:
+        bot.reply_to(message, "📊 No results yet!")
+        return
+    
+    summary = f"""
+📊 Session Results:
+
+✅ Approved: {results['approved']}
+❌ Declined: {results['declined']}
+⚠️ Errors: {results['errors']}
+📝 Total: {results['total']}
+"""
+    bot.reply_to(message, summary)
+
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
+    bot.reply_to(message, "Use /start to see available commands")
+
+# ============= Start Bot =============
+if __name__ == '__main__':
+    logger.info("Bot starting...")
+    print("🤖 Bot is running...")
+    try:
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    except Exception as e:
+        logger.error(f"Bot error: {e}")
+        print(f"❌ Error: {e}")
