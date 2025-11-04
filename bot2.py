@@ -25,7 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ============= Bot Configuration =============
-BOT_TOKEN = "8334507568:AAHp9fsFTOigfWKGBnpiThKqrDast5y-4cU"
+BOT_TOKEN = "8334507568:AAEAX1kHSnU5PZXeLsDAkvOsZx6roHMHAr8"
 ADMIN_ID = 5895491379
 OWNER_NAME = "Mahmoud Saad"
 OWNER_USERNAME = "@Moud202212"
